@@ -1,0 +1,16 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "ens-mcp",
+  "main": "src/worker.ts",
+  "compatibility_date": "2026-06-11",
+  "compatibility_flags": ["nodejs_compat"],
+  "observability": {
+    "enabled": true,
+    "head_sampling_rate": 1,
+  },
+  // Set the RPC URL as a secret (not committed):
+  //   bunx wrangler secret put ETH_RPC_URL
+  //
+  // With compat_date >= 2025-04-01 and nodejs_compat, secrets and vars are
+  // automatically exposed via process.env, which incur reads through globalEnv.
+}
