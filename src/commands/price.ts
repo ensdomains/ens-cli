@@ -7,12 +7,7 @@ import { extractLabel, durationFromOption } from '../lib/utils.ts'
 
 export const priceCommand = Cli.create('price', {
   description: 'Check the registration or renewal cost for an ENS name.',
-  // incur supports `hint` on leaf CLIs at runtime (shown in --help and skill
-  // bodies) but omits it from create.Options, so spread past the excess
-  // property check.
-  ...{
-    hint: 'Fetch the price immediately before sending the register/renew transaction (prices are USD-denominated) and use the returned bufferedTotal as the transaction value.',
-  },
+  hint: 'Fetch the price immediately before sending the register/renew transaction (prices are USD-denominated) and use the returned bufferedTotal as the transaction value.',
   args: z.object({
     name: z.string().describe('ENS name to price (e.g. myname.eth)'),
   }),

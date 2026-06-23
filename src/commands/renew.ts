@@ -7,12 +7,7 @@ import { extractLabel, asHex, durationFromOption } from '../lib/utils.ts'
 
 export const renewCommand = Cli.create('renew', {
   description: 'Generate renewal transaction calldata for an ENS name.',
-  // incur supports `hint` on leaf CLIs at runtime (shown in --help and skill
-  // bodies) but omits it from create.Options, so spread past the excess
-  // property check.
-  ...{
-    hint: 'Requires --value from ens price, fetched immediately before sending because the required ETH amount changes with the ETH/USD price.',
-  },
+  hint: 'Requires --value from ens price, fetched immediately before sending because the required ETH amount changes with the ETH/USD price.',
   args: z.object({
     name: z.string().describe('ENS name to renew (e.g. myname.eth)'),
   }),
