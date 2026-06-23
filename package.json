@@ -19,9 +19,8 @@
   ],
   "devDependencies": {
     "@cloudflare/workers-types": "4.20260611.1",
-    "@modelcontextprotocol/server": "2.0.0-alpha.2",
     "@types/bun": "1.3.14",
-    "incur": "0.4.8",
+    "incur": "0.4.9",
     "prettier": "3.8.4",
     "typescript": "5.9.3",
     "viem": "2.52.2",

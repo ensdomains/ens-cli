@@ -31,7 +31,7 @@ function mapStatus(status: number | bigint) {
 function formatExpiry(expiry: bigint) {
   if (expiry === 0n) return { expiry: null, expiryDate: null }
   return {
-    expiry: expiry.toString(),
+    expiry,
     expiryDate: new Date(Number(expiry) * 1000).toISOString(),
   }
 }
@@ -90,8 +90,8 @@ export const whoisCommand = Cli.create('whois', {
         status: mapStatus(status),
         ...formatExpiry(expiry),
         latestOwner: toNullableAddress(latestOwner),
-        tokenId: tokenId.toString(),
-        resource: resource.toString(),
+        tokenId,
+        resource,
       }
     }
 
