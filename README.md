@@ -21,9 +21,9 @@ alias ens='npx "https://pkg.pr.new/ensdomains/cli/@ensdomains/cli@main"'
 ens
 ```
 
-Replace `COMMIT_HASH` with a recent commit hash. This creates a temporary `ens` alias for the current shell session. To make it permanent, add the line to your `~/.zshrc` or `~/.bashrc`.
+The `@main` tag tracks the latest build from the main branch. This creates a temporary `ens` alias for the current shell session. To make it permanent, add the line to your `~/.zshrc` or `~/.bashrc`.
 
-To update to a newer commit, change the hash in the alias. To remove stale versions, clear your npx cache:
+To pick up a newer build after main has moved, clear your npx cache:
 
 ```sh
 npx clear-npx-cache
@@ -229,8 +229,8 @@ ens --mcp
 ### Setup
 
 ```sh
-git clone https://github.com/ensdomains/cli.git
-cd cli
+git clone https://github.com/ensdomains/ens-cli.git
+cd ens-cli
 bun install
 ```
 
@@ -253,9 +253,14 @@ ETH_RPC_URL=http://localhost:8545 bun src/index.ts available myname.eth
 src/
 ├── index.ts            # Entry point
 ├── cli.ts              # CLI definition, command mounting
+├── worker.ts           # Cloudflare Worker entry for MCP-over-HTTP via wrangler
 ├── lib/
 │   ├── client.ts       # viem public client with fallback transports
-│   └── contracts.ts    # ABIs and contract addresses
+│   ├── cointype.ts     # coin type helpers
+│   ├── context.ts      # global options/env, v2 detection
+│   ├── contracts.ts    # ABIs and contract addresses
+│   ├── utils.ts        # name validation/label helpers
+│   └── v2.ts           # ENSv2 salt/CREATE2 derivation and registry traversal
 └── commands/
     ├── get.ts          # address, name, text, avatar (nested group)
     ├── whois.ts        # owner, resolver, expiry lookup
@@ -263,9 +268,10 @@ src/
     ├── price.ts        # Registration/renewal pricing
     ├── register.ts     # commit + reveal (nested group)
     ├── renew.ts        # Renewal calldata
-    ├── resolver.ts     # deploy ENSv2 permissioned resolver (nested group)
+    ├── resolver.ts     # deploy + set ENSv2 permissioned resolver (nested group)
     ├── set.ts          # address, text, contenthash, batch (nested group)
-    └── subname.ts      # create (nested group)
+    ├── subname.ts      # create (nested group)
+    └── subregistry.ts  # deploy + set ENSv2 subregistry (nested group)
 ```
 
 ### Command design conventions
