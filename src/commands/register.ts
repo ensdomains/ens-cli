@@ -1,10 +1,19 @@
 import { Cli, z } from 'incur'
-import { zeroAddress, zeroHash } from 'viem'
+import { zeroAddress } from 'viem'
 import { encodeFunctionData, getAddress, toHex } from 'viem/utils'
 import { ethRegistrarAbi, ethRegistrarControllerAbi, addresses } from '../lib/contracts.ts'
 import { globalOptions, globalEnv, clientFromContext, activeV2Deployment } from '../lib/context.ts'
-import { extractLabel, asHex, durationFromOption } from '../lib/utils.ts'
-import { resolveDeployedOwnedResolver } from '../lib/v2.ts'
+import { extractLabel, durationFromOption } from '../lib/utils.ts'
+import {
+  buildRegistration,
+  computeV1Commitment,
+  computeV2Commitment,
+  resolveV1RegistrationParams,
+  resolveV2RegistrationParams,
+  validateSecretBytes32,
+  validateWeiValue,
+  verifyCommitmentAtReveal,
+} from '../lib/register.ts'
 
 function generateSecret(): `0x${string}` {
   const bytes = new Uint8Array(32)
@@ -12,36 +21,12 @@ function generateSecret(): `0x${string}` {
   return toHex(bytes)
 }
 
-type Registration = {
-  label: string
-  owner: `0x${string}`
-  duration: bigint
-  secret: `0x${string}`
-  resolver: `0x${string}`
-  data: readonly `0x${string}`[]
-  reverseRecord: number
-  referrer: `0x${string}`
-}
-
-function buildRegistration(opts: {
-  label: string
-  owner: `0x${string}`
-  duration: bigint
-  secret: `0x${string}`
-  resolver: `0x${string}`
-  reverseRecord: boolean
-}): Registration {
-  return {
-    label: opts.label,
-    owner: opts.owner,
-    duration: opts.duration,
-    secret: opts.secret,
-    resolver: opts.resolver,
-    data: [],
-    reverseRecord: opts.reverseRecord ? 1 : 0,
-    referrer: zeroHash,
-  }
-}
+const durationOption = z.coerce
+  .number()
+  .int()
+  .positive()
+  .optional()
+  .describe('Registration duration in seconds (default: 31536000 = 1 year)')
 
 export const registerCommands = Cli.create('register', {
   description: 'ENS name registration (commit/reveal flow)',
@@ -55,10 +40,7 @@ export const registerCommands = Cli.create('register', {
     options: globalOptions.merge(
       z.object({
         owner: z.string().describe('Address that will own the name'),
-        duration: z.coerce
-          .number()
-          .optional()
-          .describe('Registration duration in seconds (default: 31536000 = 1 year)'),
+        duration: durationOption,
         secret: z.string().optional().describe('Secret bytes32 hex (auto-generated if omitted)'),
         resolver: z
           .string()
@@ -84,30 +66,21 @@ export const registerCommands = Cli.create('register', {
       const label = extractLabel(c.args.name)
       const owner = getAddress(c.options.owner)
       const duration = durationFromOption(c.options.duration)
-      const secret = c.options.secret ? asHex(c.options.secret, 'secret') : generateSecret()
+      const secret = c.options.secret ? validateSecretBytes32(c.options.secret) : generateSecret()
       const v2Deployment = await activeV2Deployment(c)
 
       if (v2Deployment) {
-        const subregistry = c.options.subregistry ? getAddress(c.options.subregistry) : zeroAddress
-        const resolver = c.options.resolver
-          ? getAddress(c.options.resolver)
-          : await resolveDeployedOwnedResolver({
-              client,
-              factory: v2Deployment.resolverFactory,
-              proxyLogic: v2Deployment.resolverProxyLogic,
-              owner,
-            })
-        const paymentToken = c.options.paymentToken
-          ? getAddress(c.options.paymentToken)
-          : v2Deployment.paymentToken
-        const referrer = c.options.referrer ? asHex(c.options.referrer, 'referrer') : zeroHash
+        const v2Params = await resolveV2RegistrationParams(client, v2Deployment, owner, c.options)
 
-        const commitment = await client.readContract({
-          address: v2Deployment.registrar,
-          abi: ethRegistrarAbi,
-          functionName: 'makeCommitment',
-          args: [label, owner, secret, subregistry, resolver, duration, referrer],
-        })
+        const commitment = await computeV2Commitment(
+          client,
+          v2Deployment.registrar,
+          label,
+          owner,
+          secret,
+          v2Params,
+          duration,
+        )
 
         const data = encodeFunctionData({
           abi: ethRegistrarAbi,
@@ -116,7 +89,7 @@ export const registerCommands = Cli.create('register', {
         })
 
         const resolverHint =
-          resolver === zeroAddress
+          v2Params.resolver === zeroAddress
             ? `Optional: deploy a per-account resolver with: ens resolver deploy ${owner} --chain ${chain}, then re-run commit/reveal with --resolver <addr>.`
             : undefined
 
@@ -130,16 +103,11 @@ export const registerCommands = Cli.create('register', {
           label,
           owner,
           duration: duration.toString(),
-          resolver,
-          resolverSource:
-            c.options.resolver != null
-              ? 'option'
-              : resolver === zeroAddress
-                ? 'none'
-                : 'ownedResolver',
-          subregistry,
-          paymentToken,
-          referrer,
+          resolver: v2Params.resolver,
+          resolverSource: v2Params.resolverSource,
+          subregistry: v2Params.subregistry,
+          paymentToken: v2Params.paymentToken,
+          referrer: v2Params.referrer,
           registry: v2Deployment.registry,
           registrar: v2Deployment.registrar,
           version: 'v2',
@@ -147,34 +115,26 @@ export const registerCommands = Cli.create('register', {
           nextSteps: [
             '1. Broadcast this commit transaction',
             '2. Wait at least 60 seconds after the tx is mined',
-            `3. Run: ens price ${c.args.name} --chain ${chain} --paymentToken ${paymentToken}`,
+            `3. Run: ens price ${c.args.name} --chain ${chain} --paymentToken ${v2Params.paymentToken}`,
             `4. Approve ${v2Deployment.registrar} to spend the total ERC-20 price`,
-            `5. Run: ens register reveal ${c.args.name} --owner ${owner} --chain ${chain} --secret ${secret} --paymentToken ${paymentToken} --resolver ${resolver}`,
+            `5. Run: ens register reveal ${c.args.name} --owner ${owner} --chain ${chain} --secret ${secret} --paymentToken ${v2Params.paymentToken} --resolver ${v2Params.resolver}`,
           ],
         }
       }
 
       const controllerAddress = addresses[chain].controller
-      const resolver = c.options.resolver
-        ? getAddress(c.options.resolver)
-        : addresses[chain].resolver
-      const reverseRecord = c.options.reverseRecord ?? false
+      const v1Params = resolveV1RegistrationParams(chain, c.options)
 
       const registration = buildRegistration({
         label,
         owner,
         duration,
         secret,
-        resolver,
-        reverseRecord,
+        resolver: v1Params.resolver,
+        reverseRecord: v1Params.reverseRecord,
       })
 
-      const commitment = await client.readContract({
-        address: controllerAddress,
-        abi: ethRegistrarControllerAbi,
-        functionName: 'makeCommitment',
-        args: [registration],
-      })
+      const commitment = await computeV1Commitment(client, controllerAddress, registration)
 
       const data = encodeFunctionData({
         abi: ethRegistrarControllerAbi,
@@ -192,8 +152,8 @@ export const registerCommands = Cli.create('register', {
         label,
         owner,
         duration: duration.toString(),
-        resolver,
-        reverseRecord,
+        resolver: v1Params.resolver,
+        reverseRecord: v1Params.reverseRecord,
         nextSteps: [
           '1. Broadcast this commit transaction',
           '2. Wait at least 60 seconds after the tx is mined',
@@ -219,10 +179,7 @@ export const registerCommands = Cli.create('register', {
           .describe(
             'ENSv1 ETH value in wei to send (use bufferedTotal from ens price, fetched immediately before this step)',
           ),
-        duration: z.coerce
-          .number()
-          .optional()
-          .describe('Registration duration in seconds (must match commit)'),
+        duration: durationOption.describe('Registration duration in seconds (must match commit)'),
         resolver: z
           .string()
           .optional()
@@ -239,6 +196,10 @@ export const registerCommands = Cli.create('register', {
           .describe('ENSv2 ERC-20 payment token (must be approved before reveal)'),
         referrer: z.string().optional().describe('Referrer bytes32 hex (must match commit)'),
         reverseRecord: z.boolean().optional().describe('Set reverse record (must match commit)'),
+        skipCommitmentCheck: z
+          .boolean()
+          .optional()
+          .describe('Skip onchain commitment verification (default: false)'),
       }),
     ),
     env: globalEnv,
@@ -247,28 +208,44 @@ export const registerCommands = Cli.create('register', {
       const label = extractLabel(c.args.name)
       const owner = getAddress(c.options.owner)
       const duration = durationFromOption(c.options.duration)
-      const secret = asHex(c.options.secret, 'secret')
+      const secret = validateSecretBytes32(c.options.secret)
+      const skipCommitmentCheck = c.options.skipCommitmentCheck ?? false
       const v2Deployment = await activeV2Deployment(c)
 
       if (v2Deployment) {
-        const subregistry = c.options.subregistry ? getAddress(c.options.subregistry) : zeroAddress
-        const resolver = c.options.resolver
-          ? getAddress(c.options.resolver)
-          : await resolveDeployedOwnedResolver({
-              client,
-              factory: v2Deployment.resolverFactory,
-              proxyLogic: v2Deployment.resolverProxyLogic,
-              owner,
-            })
-        const paymentToken = c.options.paymentToken
-          ? getAddress(c.options.paymentToken)
-          : v2Deployment.paymentToken
-        const referrer = c.options.referrer ? asHex(c.options.referrer, 'referrer') : zeroHash
+        const v2Params = await resolveV2RegistrationParams(client, v2Deployment, owner, c.options)
+
+        const commitment = await computeV2Commitment(
+          client,
+          v2Deployment.registrar,
+          label,
+          owner,
+          secret,
+          v2Params,
+          duration,
+        )
+
+        const commitmentVerification = await verifyCommitmentAtReveal({
+          client,
+          skipCommitmentCheck,
+          version: 'v2',
+          contractAddress: v2Deployment.registrar,
+          commitment,
+        })
 
         const data = encodeFunctionData({
           abi: ethRegistrarAbi,
           functionName: 'register',
-          args: [label, owner, secret, subregistry, resolver, duration, paymentToken, referrer],
+          args: [
+            label,
+            owner,
+            secret,
+            v2Params.subregistry,
+            v2Params.resolver,
+            duration,
+            v2Params.paymentToken,
+            v2Params.referrer,
+          ],
         })
 
         return {
@@ -279,40 +256,46 @@ export const registerCommands = Cli.create('register', {
           label,
           owner,
           duration: duration.toString(),
-          resolver,
-          resolverSource:
-            c.options.resolver != null
-              ? 'option'
-              : resolver === zeroAddress
-                ? 'none'
-                : 'ownedResolver',
-          subregistry,
-          paymentToken,
-          referrer,
+          resolver: v2Params.resolver,
+          resolverSource: v2Params.resolverSource,
+          subregistry: v2Params.subregistry,
+          paymentToken: v2Params.paymentToken,
+          referrer: v2Params.referrer,
           registry: v2Deployment.registry,
           registrar: v2Deployment.registrar,
           version: 'v2',
-          note: `Approve ${v2Deployment.registrar} to spend the ERC-20 total from ens price before broadcasting this transaction.`,
+          ...commitmentVerification,
+          note: commitmentVerification.commitmentCheckSkipped
+            ? `Commitment check skipped. Approve ${v2Deployment.registrar} to spend the ERC-20 total from ens price before broadcasting this transaction.`
+            : `Approve ${v2Deployment.registrar} to spend the ERC-20 total from ens price before broadcasting this transaction.`,
         }
       }
 
       if (c.options.value == null) {
         throw new Error('ENSv1 reveal requires --value <bufferedTotal from ens price>')
       }
+      const value = validateWeiValue(c.options.value)
 
       const controllerAddress = addresses[chain].controller
-      const resolver = c.options.resolver
-        ? getAddress(c.options.resolver)
-        : addresses[chain].resolver
-      const reverseRecord = c.options.reverseRecord ?? false
+      const v1Params = resolveV1RegistrationParams(chain, c.options)
 
       const registration = buildRegistration({
         label,
         owner,
         duration,
         secret,
-        resolver,
-        reverseRecord,
+        resolver: v1Params.resolver,
+        reverseRecord: v1Params.reverseRecord,
+      })
+
+      const commitment = await computeV1Commitment(client, controllerAddress, registration)
+
+      const commitmentVerification = await verifyCommitmentAtReveal({
+        client,
+        skipCommitmentCheck,
+        version: 'v1',
+        contractAddress: controllerAddress,
+        commitment,
       })
 
       const data = encodeFunctionData({
@@ -324,11 +307,17 @@ export const registerCommands = Cli.create('register', {
       return {
         to: controllerAddress,
         data,
-        value: c.options.value,
+        value,
         name: c.args.name,
         label,
         owner,
         duration: duration.toString(),
+        resolver: v1Params.resolver,
+        reverseRecord: v1Params.reverseRecord,
+        ...commitmentVerification,
+        ...(commitmentVerification.commitmentCheckSkipped
+          ? { note: 'Commitment check skipped.' }
+          : {}),
       }
     },
   })

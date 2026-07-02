@@ -89,6 +89,27 @@ export const ethRegistrarControllerAbi = [
     ],
     outputs: [{ name: '', type: 'bytes32' }],
   },
+  {
+    name: 'commitments',
+    type: 'function',
+    stateMutability: 'view',
+    inputs: [{ name: 'commitment', type: 'bytes32' }],
+    outputs: [{ name: '', type: 'uint256' }],
+  },
+  {
+    name: 'minCommitmentAge',
+    type: 'function',
+    stateMutability: 'view',
+    inputs: [],
+    outputs: [{ name: '', type: 'uint256' }],
+  },
+  {
+    name: 'maxCommitmentAge',
+    type: 'function',
+    stateMutability: 'view',
+    inputs: [],
+    outputs: [{ name: '', type: 'uint256' }],
+  },
 ] as const
 
 export const ethRegistrarAbi = [
