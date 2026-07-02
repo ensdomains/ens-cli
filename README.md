@@ -21,9 +21,12 @@ alias ens='npx "https://pkg.pr.new/ensdomains/cli/@ensdomains/cli@main"'
 ens
 ```
 
-The `@main` tag tracks the latest build from the main branch. This creates a temporary `ens` alias for the current shell session. To make it permanent, add the line to your `~/.zshrc` or `~/.bashrc`.
+This creates a temporary `ens` alias for the current shell session. To make it permanent, add the line to your `~/.zshrc` or `~/.bashrc`. There are two ways to pick a build:
 
-To pick up a newer build after main has moved, clear your npx cache:
+- **Track the latest main build** (as above): the `@main` tag always points to the most recent build from the main branch. To pick up a newer build after main has moved, clear your npx cache.
+- **Pin a specific commit**: replace `main` in the URL with a commit hash (e.g. `@ensdomains/cli@COMMIT_HASH`). To update, change the hash in the alias.
+
+To remove stale cached versions, clear your npx cache:
 
 ```sh
 npx clear-npx-cache
@@ -245,33 +248,6 @@ bun src/index.ts get address vitalik.eth --rpc http://localhost:8545
 
 # With environment variable
 ETH_RPC_URL=http://localhost:8545 bun src/index.ts available myname.eth
-```
-
-### Project structure
-
-```
-src/
-├── index.ts            # Entry point
-├── cli.ts              # CLI definition, command mounting
-├── worker.ts           # Cloudflare Worker entry for MCP-over-HTTP via wrangler
-├── lib/
-│   ├── client.ts       # viem public client with fallback transports
-│   ├── cointype.ts     # coin type helpers
-│   ├── context.ts      # global options/env, v2 detection
-│   ├── contracts.ts    # ABIs and contract addresses
-│   ├── utils.ts        # name validation/label helpers
-│   └── v2.ts           # ENSv2 salt/CREATE2 derivation and registry traversal
-└── commands/
-    ├── get.ts          # address, name, text, avatar (nested group)
-    ├── whois.ts        # owner, resolver, expiry lookup
-    ├── available.ts    # Name availability check
-    ├── price.ts        # Registration/renewal pricing
-    ├── register.ts     # commit + reveal (nested group)
-    ├── renew.ts        # Renewal calldata
-    ├── resolver.ts     # deploy + set ENSv2 permissioned resolver (nested group)
-    ├── set.ts          # address, text, contenthash, batch (nested group)
-    ├── subname.ts      # create (nested group)
-    └── subregistry.ts  # deploy + set ENSv2 subregistry (nested group)
 ```
 
 ### Command design conventions
