@@ -13,7 +13,7 @@ import {
 } from '../lib/context.ts'
 import { coinTypeOptions, resolveCoinType } from '../lib/cointype.ts'
 
-const batchOperationSchema = z.discriminatedUnion('type', [
+export const batchOperationSchema = z.discriminatedUnion('type', [
   z.object({
     type: z.literal('address'),
     address: z.string(),
@@ -49,7 +49,11 @@ async function resolveTargetResolver(c: SetContext, name: string): Promise<`0x${
   return resolver
 }
 
-function encodeSetAddr(node: `0x${string}`, address: string, coinType?: number): `0x${string}` {
+export function encodeSetAddr(
+  node: `0x${string}`,
+  address: string,
+  coinType?: number,
+): `0x${string}` {
   if (coinType != null) {
     return encodeFunctionData({
       abi: publicResolverAbi,
@@ -64,7 +68,7 @@ function encodeSetAddr(node: `0x${string}`, address: string, coinType?: number):
   })
 }
 
-function encodeSetText(node: `0x${string}`, key: string, value: string): `0x${string}` {
+export function encodeSetText(node: `0x${string}`, key: string, value: string): `0x${string}` {
   return encodeFunctionData({
     abi: publicResolverAbi,
     functionName: 'setText',
@@ -72,7 +76,7 @@ function encodeSetText(node: `0x${string}`, key: string, value: string): `0x${st
   })
 }
 
-function encodeSetContenthash(node: `0x${string}`, hash: string): `0x${string}` {
+export function encodeSetContenthash(node: `0x${string}`, hash: string): `0x${string}` {
   return encodeFunctionData({
     abi: publicResolverAbi,
     functionName: 'setContenthash',
@@ -80,7 +84,7 @@ function encodeSetContenthash(node: `0x${string}`, hash: string): `0x${string}` 
   })
 }
 
-function encodeBatchOperation(node: `0x${string}`, op: BatchOperation): `0x${string}` {
+export function encodeBatchOperation(node: `0x${string}`, op: BatchOperation): `0x${string}` {
   switch (op.type) {
     case 'address':
       return encodeSetAddr(node, op.address, resolveCoinType(op))
