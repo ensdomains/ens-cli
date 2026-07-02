@@ -89,6 +89,27 @@ export const ethRegistrarControllerAbi = [
     ],
     outputs: [{ name: '', type: 'bytes32' }],
   },
+  {
+    name: 'commitments',
+    type: 'function',
+    stateMutability: 'view',
+    inputs: [{ name: 'commitment', type: 'bytes32' }],
+    outputs: [{ name: '', type: 'uint256' }],
+  },
+  {
+    name: 'minCommitmentAge',
+    type: 'function',
+    stateMutability: 'view',
+    inputs: [],
+    outputs: [{ name: '', type: 'uint256' }],
+  },
+  {
+    name: 'maxCommitmentAge',
+    type: 'function',
+    stateMutability: 'view',
+    inputs: [],
+    outputs: [{ name: '', type: 'uint256' }],
+  },
 ] as const
 
 export const ethRegistrarAbi = [
@@ -128,6 +149,32 @@ export const ethRegistrarAbi = [
       { name: 'base', type: 'uint256' },
       { name: 'premium', type: 'uint256' },
     ],
+  },
+  {
+    name: 'getRenewPrice',
+    type: 'function',
+    stateMutability: 'view',
+    inputs: [
+      { name: 'label', type: 'string' },
+      { name: 'duration', type: 'uint64' },
+      { name: 'paymentToken', type: 'address' },
+    ],
+    outputs: [
+      { name: 'base', type: 'uint256' },
+      { name: 'premium', type: 'uint256' },
+    ],
+  },
+  {
+    name: 'renew',
+    type: 'function',
+    stateMutability: 'nonpayable',
+    inputs: [
+      { name: 'label', type: 'string' },
+      { name: 'duration', type: 'uint64' },
+      { name: 'paymentToken', type: 'address' },
+      { name: 'referrer', type: 'bytes32' },
+    ],
+    outputs: [],
   },
   {
     name: 'isAvailable',

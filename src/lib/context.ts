@@ -1,4 +1,9 @@
 import { z } from 'incur'
+import {
+  AbiDecodingZeroDataError,
+  ContractFunctionRevertedError,
+  ContractFunctionZeroDataError,
+} from 'viem'
 import { createEnsClient } from './client.ts'
 import { addresses, universalResolverAbi, type Chain } from './contracts.ts'
 
@@ -37,6 +42,18 @@ export function universalResolverAddress(c: Context, chain: Chain): `0x${string}
   return universalResolverOverride(c) ?? addresses[chain].universalResolver
 }
 
+/** Contract-level probe failures mean the UR lacks v2; transport/RPC errors must propagate. */
+function isV2ProbeContractFailure(err: unknown): boolean {
+  if (!(err instanceof Error) || !('walk' in err)) return false
+  const walkable = err as Error & { walk: (fn: (e: Error) => boolean) => Error | undefined }
+  return !!walkable.walk(
+    (e) =>
+      e instanceof ContractFunctionRevertedError ||
+      e instanceof ContractFunctionZeroDataError ||
+      e instanceof AbiDecodingZeroDataError,
+  )
+}
+
 // Switch to help with logic around ENSv2
 // Check if the UR implements `findCanonicalRegistry()`, which only exists in v2
 export async function isV2Active(c: Context) {
@@ -51,8 +68,11 @@ export async function isV2Active(c: Context) {
     })
 
     return { isV2: true, ethRegistry } as const
-  } catch {
-    return { isV2: false } as const
+  } catch (err) {
+    if (isV2ProbeContractFailure(err)) {
+      return { isV2: false } as const
+    }
+    throw err
   }
 }
 
