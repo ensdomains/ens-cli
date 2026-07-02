@@ -7,7 +7,7 @@ describe('resolveCoinType', () => {
     expect(resolveCoinType({ coinType: 0 })).toBe(0)
   })
 
-  test('converts chainId to ENSIP-11 coin type', () => {
+  test('wires chainId through to viem toCoinType conversion', () => {
     expect(resolveCoinType({ chainId: 10 })).toBe(2147483658)
   })
 

@@ -68,7 +68,7 @@ export function encodeSetAddr(
   })
 }
 
-export function encodeSetText(node: `0x${string}`, key: string, value: string): `0x${string}` {
+function encodeSetText(node: `0x${string}`, key: string, value: string): `0x${string}` {
   return encodeFunctionData({
     abi: publicResolverAbi,
     functionName: 'setText',
@@ -76,7 +76,7 @@ export function encodeSetText(node: `0x${string}`, key: string, value: string): 
   })
 }
 
-export function encodeSetContenthash(node: `0x${string}`, hash: string): `0x${string}` {
+function encodeSetContenthash(node: `0x${string}`, hash: string): `0x${string}` {
   return encodeFunctionData({
     abi: publicResolverAbi,
     functionName: 'setContenthash',
@@ -84,7 +84,7 @@ export function encodeSetContenthash(node: `0x${string}`, hash: string): `0x${st
   })
 }
 
-export function encodeBatchOperation(node: `0x${string}`, op: BatchOperation): `0x${string}` {
+function encodeBatchOperation(node: `0x${string}`, op: BatchOperation): `0x${string}` {
   switch (op.type) {
     case 'address':
       return encodeSetAddr(node, op.address, resolveCoinType(op))
