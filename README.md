@@ -21,9 +21,12 @@ alias ens='npx "https://pkg.pr.new/ensdomains/cli/@ensdomains/cli@main"'
 ens
 ```
 
-Replace `COMMIT_HASH` with a recent commit hash. This creates a temporary `ens` alias for the current shell session. To make it permanent, add the line to your `~/.zshrc` or `~/.bashrc`.
+This creates a temporary `ens` alias for the current shell session. To make it permanent, add the line to your `~/.zshrc` or `~/.bashrc`. There are two ways to pick a build:
 
-To update to a newer commit, change the hash in the alias. To remove stale versions, clear your npx cache:
+- **Track the latest main build** (as above): the `@main` tag always points to the most recent build from the main branch. To pick up a newer build after main has moved, clear your npx cache.
+- **Pin a specific commit**: replace `main` in the URL with a commit hash (e.g. `@ensdomains/cli@COMMIT_HASH`). To update, change the hash in the alias.
+
+To remove stale cached versions, clear your npx cache:
 
 ```sh
 npx clear-npx-cache
@@ -229,8 +232,8 @@ ens --mcp
 ### Setup
 
 ```sh
-git clone https://github.com/ensdomains/cli.git
-cd cli
+git clone https://github.com/ensdomains/ens-cli.git
+cd ens-cli
 bun install
 ```
 
@@ -245,27 +248,6 @@ bun src/index.ts get address vitalik.eth --rpc http://localhost:8545
 
 # With environment variable
 ETH_RPC_URL=http://localhost:8545 bun src/index.ts available myname.eth
-```
-
-### Project structure
-
-```
-src/
-├── index.ts            # Entry point
-├── cli.ts              # CLI definition, command mounting
-├── lib/
-│   ├── client.ts       # viem public client with fallback transports
-│   └── contracts.ts    # ABIs and contract addresses
-└── commands/
-    ├── get.ts          # address, name, text, avatar (nested group)
-    ├── whois.ts        # owner, resolver, expiry lookup
-    ├── available.ts    # Name availability check
-    ├── price.ts        # Registration/renewal pricing
-    ├── register.ts     # commit + reveal (nested group)
-    ├── renew.ts        # Renewal calldata
-    ├── resolver.ts     # deploy ENSv2 permissioned resolver (nested group)
-    ├── set.ts          # address, text, contenthash, batch (nested group)
-    └── subname.ts      # create (nested group)
 ```
 
 ### Command design conventions

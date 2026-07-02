@@ -1,6 +1,10 @@
 {
   "name": "@ensdomains/cli",
   "version": "0.1.0",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/ensdomains/ens-cli.git"
+  },
   "type": "module",
   "bin": {
     "ens": "dist/ens.mjs"
