@@ -271,7 +271,7 @@ export const addresses = {
       registry: '0xDEDB92913A25abE1f7BCDD85D8A344a43B398B67',
       registrar: '0x8c2E866B439358c41AE05De9cbE8A00BFEFafFcA',
       paymentToken: '0x3DfC8b53dAFa5eBbb071a8B97678Ab534Ed838D9',
-      resolverFactory: '0xd2A632D8A8b67C2c4398c255CBd7Af8Dd7236198',
+      resolverFactory: '0xD2a632D8a8b67c2c4398c255CbD7aF8dd7236198',
       resolverImplementation: '0xdcE5205A553573FFd47629327DDdf36186022FfA',
       resolverProxyLogic: '0x917C561a74Df398646e06f3FFAA51DB8e8330C5A',
       subregistryImplementation: '0x0F99e7Ea74903AfCB7224d0354fD7428A6f92917',
