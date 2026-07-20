@@ -139,6 +139,26 @@ ens price myname.eth
 ens renew myname.eth --value 2307947853431408 --json
 ```
 
+### Migrating from ENSv1 to ENSv2
+
+Generate the one-way migration transaction for a pre-migrated (reserved) `.eth` 2LD. The command reads the v1 owner, resolver, wrapping state, and fuses, then targets the unlocked or locked migration controller as appropriate.
+
+```sh
+ens migrate myname.eth --chain sepolia --json
+# Returns: { to, data, value, kind, currentOwner, owner, controller, ... }
+
+# Optionally change v2 configuration during migration
+ens migrate myname.eth \
+  --chain sepolia \
+  --owner 0xNewOwner \
+  --resolver 0xResolver \
+  --subregistry 0xSubregistry
+```
+
+The transaction must be sent by the current ENSv1 token owner or an approved operator. Unwrapped names transfer the Base Registrar ERC-721 to the unlocked controller. Wrapped names transfer the NameWrapper ERC-1155 to either the unlocked or locked controller based on `CANNOT_UNWRAP`. Locked migration deploys its own `WrapperRegistry`, so `--subregistry` is ignored in that case.
+
+Migration only works after the name has been reserved in ENSv2 and cannot be reversed. Test on Sepolia before migrating valuable names.
+
 ### Subnames
 
 Generate calldata to create a subname under a parent you own. On ENSv2, the command walks the registry hierarchy and targets the parent's subregistry. If the parent has no subregistry, deploy one with `ens subregistry deploy` and set it with `ens subregistry set` first. On ENSv1, the command reads the parent's onchain owner; if the parent is wrapped in the NameWrapper, the calldata targets the NameWrapper instead of the registry.

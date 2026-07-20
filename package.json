@@ -14,6 +14,7 @@
     "build": "bun build src/index.ts --outfile dist/ens.mjs --target node --minify",
     "dev:worker": "wrangler dev",
     "deploy": "wrangler deploy",
+    "test": "bun test",
     "cf-typegen": "wrangler types",
     "typecheck": "tsc --noEmit",
     "format": "prettier --write ."

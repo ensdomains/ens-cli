@@ -207,6 +207,8 @@ export const publicResolverAbi = [
 
 export const baseRegistrarAbi = parseAbi([
   'function nameExpires(uint256 id) external view returns (uint256)',
+  'function ownerOf(uint256 tokenId) external view returns (address)',
+  'function safeTransferFrom(address from, address to, uint256 tokenId, bytes data) external',
 ])
 
 export const ensRegistryAbi = parseAbi([
@@ -247,6 +249,8 @@ export const permissionedResolverAbi = parseAbi([
 
 export const nameWrapperAbi = parseAbi([
   'function ownerOf(uint256 id) external view returns (address)',
+  'function getData(uint256 id) external view returns (address owner, uint32 fuses, uint64 expiry)',
+  'function safeTransferFrom(address from, address to, uint256 id, uint256 amount, bytes data) external',
   'function setResolver(bytes32 node, address resolver) external',
   'function setSubnodeRecord(bytes32 parentNode, string label, address owner, address resolver, uint64 ttl, uint32 fuses, uint64 expiry) external returns (bytes32)',
 ])
@@ -275,6 +279,8 @@ export const addresses = {
       resolverImplementation: '0xdcE5205A553573FFd47629327DDdf36186022FfA',
       resolverProxyLogic: '0x917C561a74Df398646e06f3FFAA51DB8e8330C5A',
       subregistryImplementation: '0x0F99e7Ea74903AfCB7224d0354fD7428A6f92917',
+      lockedMigrationController: '0xF91c34ED840889Ed96F806f882fD50506A336Edb',
+      unlockedMigrationController: '0x056138Ef5660F7113a3B0ADC08ac3683310e7FBC',
     },
   },
 } as const
