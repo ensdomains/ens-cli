@@ -13,16 +13,46 @@ import {
 } from '../lib/context.ts'
 import { coinTypeOptions, resolveCoinType } from '../lib/cointype.ts'
 
-const batchOperationSchema = z.discriminatedUnion('type', [
-  z.object({
-    type: z.literal('address'),
-    address: z.string(),
-    coinType: z.number().optional(),
-    chainId: z.number().optional(),
-  }),
-  z.object({ type: z.literal('text'), key: z.string(), value: z.string() }),
-  z.object({ type: z.literal('contenthash'), hash: z.string() }),
-])
+const batchOperationSchema = z
+  .discriminatedUnion('type', [
+    z
+      .object({
+        type: z.literal('address'),
+        address: z.string(),
+        coinType: z.number().int().nonnegative().optional(),
+        chainId: z.number().int().nonnegative().optional(),
+      })
+      .strict(),
+    z.object({ type: z.literal('text'), key: z.string(), value: z.string() }).strict(),
+    z.object({ type: z.literal('contenthash'), hash: z.string() }).strict(),
+  ])
+  .superRefine((operation, ctx) => {
+    if (operation.type === 'address' && operation.coinType != null && operation.chainId != null) {
+      ctx.addIssue({
+        code: 'custom',
+        message: 'Address operations cannot specify both coinType and chainId',
+        path: ['chainId'],
+      })
+    }
+  })
+
+const batchOperationsSchema = z
+  .array(batchOperationSchema)
+  .min(1, 'At least one operation is required')
+
+const batchDataSchema = z
+  .preprocess((value, ctx) => {
+    if (typeof value !== 'string') return value
+    try {
+      return JSON.parse(value)
+    } catch {
+      ctx.addIssue({ code: 'custom', message: 'Must be valid JSON' })
+      return z.NEVER
+    }
+  }, batchOperationsSchema)
+  .describe(
+    'JSON array of operations: [{"type":"text","key":"url","value":"https://..."},{"type":"address","address":"0x...","chainId":10},{"type":"address","address":"0x...","coinType":0},{"type":"contenthash","hash":"0x..."}]',
+  )
 
 type BatchOperation = z.infer<typeof batchOperationSchema>
 
@@ -200,29 +230,15 @@ export const setCommands = Cli.create('set', {
     }),
     options: globalOptions.merge(resolverOption).merge(
       z.object({
-        data: z
-          .string()
-          .describe(
-            'JSON array of operations: [{"type":"text","key":"url","value":"https://..."},{"type":"address","address":"0x...","chainId":10},{"type":"address","address":"0x...","coinType":0},{"type":"contenthash","hash":"0x..."}]',
-          ),
+        data: batchDataSchema,
       }),
     ),
     env: globalEnv,
-    examples: [
-      {
-        args: { name: 'myname.eth' },
-        options: {
-          data: `'[{"type":"text","key":"url","value":"https://example.com"}]'`,
-        },
-        description: 'Set records in a single transaction',
-      },
-    ],
     async run(c) {
       const name = validateName(c.args.name)
       const resolverAddress = await resolveTargetResolver(c, name)
       const node = namehash(name)
-      const operations = z.array(batchOperationSchema).parse(JSON.parse(c.options.data))
-      const calls = operations.map((op) => encodeBatchOperation(node, op))
+      const calls = c.options.data.map((operation) => encodeBatchOperation(node, operation))
 
       const data = encodeFunctionData({
         abi: publicResolverAbi,
