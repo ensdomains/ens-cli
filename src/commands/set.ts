@@ -134,17 +134,19 @@ export const setCommands = Cli.create('set', {
   description: 'Set ENS records (outputs calldata JSON)',
 })
   .command('name', {
-    description: 'Generate calldata to set a primary name',
+    description: 'Generate calldata to set an ETH reverse record',
     hint: 'The transaction sender is the address whose reverse record will be changed. A functional primary name requires bidirectional resolution: the name must forward-resolve to that same address.',
     args: z.object({
-      name: z.string().describe("ENS name to set as the sender's primary name (e.g. myname.eth)"),
+      name: z
+        .string()
+        .describe("ENS name to store in the sender's reverse record (e.g. myname.eth)"),
     }),
     options: globalOptions.omit({ universalResolver: true }),
     env: globalEnv,
     examples: [
       {
         args: { name: 'myname.eth' },
-        description: "Set myname.eth as the sender's primary name",
+        description: "Set the sender's reverse record to myname.eth",
       },
     ],
     async run(c) {
