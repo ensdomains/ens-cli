@@ -107,6 +107,9 @@ Set the transaction sender's ETH reverse record.
 ```sh
 ens set name myname.eth
 # Returns: { to, data, value, name, reverseRegistrar }
+
+# Clear the reverse record
+ens set name ''
 ```
 
 The generated transaction must be sent from the address whose reverse record should be changed. A reverse record is only one half of a primary name. A functional primary name requires a bidirectional match: the name must forward-resolve to that same address, and the address's reverse record must point back to the name.
