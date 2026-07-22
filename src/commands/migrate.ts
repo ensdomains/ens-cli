@@ -98,8 +98,8 @@ export function buildMigrationTransaction(opts: {
 }
 
 export const migrateCommand = Cli.create('migrate', {
-  description:
-    'Generate calldata to migrate a reserved .eth 2LD from ENSv1 to ENSv2. Auto-detects unwrapped, wrapped-unlocked, and wrapped-locked names and targets the matching migration controller.',
+  description: 'Migrate a .eth name from ENSv1 to ENSv2.',
+  hint: 'Generates unsigned calldata only. The name must be a pre-migrated RESERVED .eth 2LD. The command detects unwrapped, wrapped-unlocked, and wrapped-locked names and selects the matching controller. Broadcasting the resulting transaction is one-way and must be done by the current ENSv1 owner or an approved operator.',
   args: z.object({
     name: z.string().describe('ENSv1 .eth name to migrate (e.g. myname.eth)'),
   }),
@@ -129,6 +129,27 @@ export const migrateCommand = Cli.create('migrate', {
         .describe('Override the configured UnlockedMigrationController address'),
     }),
   ),
+  examples: [
+    {
+      description: 'Migrate a reserved Sepolia name with its current owner and resolver',
+      args: { name: 'myname.eth' },
+      options: { chain: 'sepolia' },
+    },
+    {
+      description: 'Choose the ENSv2 owner, resolver, and unlocked-name subregistry',
+      args: { name: 'myname.eth' },
+      options: {
+        chain: 'sepolia',
+        owner: '0x0000000000000000000000000000000000000001',
+        resolver: '0x0000000000000000000000000000000000000002',
+        subregistry: '0x0000000000000000000000000000000000000003',
+      },
+    },
+  ],
+  mcp: {
+    instructions:
+      'This tool reads onchain state and returns unsigned calldata; it does not broadcast a transaction. Treat the returned migration transaction as one-way. Confirm the name, current ENSv1 owner, destination owner, resolver, and selected controller before sending it.',
+  },
   env: globalEnv,
   async run(c) {
     const { client, chain } = clientFromContext(c)
