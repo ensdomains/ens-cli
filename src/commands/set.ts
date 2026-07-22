@@ -28,8 +28,8 @@ type BatchOperation = z.infer<typeof batchOperationSchema>
 
 type SetContext = Context & { options: { resolver?: string } }
 
-const TARGET_RESOLVER_HINT =
-  'Uses --resolver when provided; otherwise resolves the target resolver via the Universal Resolver.'
+const RESOLVER_SELECTION_HINT =
+  "By default, the generated transaction targets the name's current resolver. Use --resolver to override it."
 
 async function resolveTargetResolver(c: SetContext, name: string): Promise<`0x${string}`> {
   if (c.options.resolver) return getAddress(c.options.resolver)
@@ -98,9 +98,7 @@ const resolverOption = z.object({
   resolver: z
     .string()
     .optional()
-    .describe(
-      'Resolver address to target. If omitted, the resolver is read from the Universal Resolver; if none is set, the command fails.',
-    ),
+    .describe("Resolver contract to target instead of the name's current resolver"),
 })
 
 export const setCommands = Cli.create('set', {
@@ -108,7 +106,7 @@ export const setCommands = Cli.create('set', {
 })
   .command('address', {
     description: 'Generate calldata to set an address record',
-    hint: TARGET_RESOLVER_HINT,
+    hint: RESOLVER_SELECTION_HINT,
     args: z.object({
       name: z.string().describe('ENS name (e.g. myname.eth)'),
     }),
@@ -139,7 +137,7 @@ export const setCommands = Cli.create('set', {
   })
   .command('text', {
     description: 'Generate calldata to set a text record',
-    hint: TARGET_RESOLVER_HINT,
+    hint: RESOLVER_SELECTION_HINT,
     args: z.object({
       name: z.string().describe('ENS name (e.g. myname.eth)'),
     }),
@@ -167,7 +165,7 @@ export const setCommands = Cli.create('set', {
   })
   .command('contenthash', {
     description: 'Generate calldata to set a contenthash record',
-    hint: TARGET_RESOLVER_HINT,
+    hint: RESOLVER_SELECTION_HINT,
     args: z.object({
       name: z.string().describe('ENS name (e.g. myname.eth)'),
     }),
@@ -196,7 +194,7 @@ export const setCommands = Cli.create('set', {
   })
   .command('batch', {
     description: 'Generate multicall calldata to set multiple records',
-    hint: `Pass a JSON array of record operations. ${TARGET_RESOLVER_HINT}`,
+    hint: `Pass a JSON array of record operations. ${RESOLVER_SELECTION_HINT}`,
     args: z.object({
       name: z.string().describe('ENS name (e.g. myname.eth)'),
     }),
