@@ -157,7 +157,9 @@ ens migrate myname.eth \
 
 The transaction must be sent by the current ENSv1 token owner or an approved operator. Unwrapped names transfer the Base Registrar ERC-721 to the unlocked controller. Wrapped names transfer the NameWrapper ERC-1155 to either the unlocked or locked controller based on `CANNOT_UNWRAP`. Locked migration deploys its own `WrapperRegistry`, so `--subregistry` is ignored in that case.
 
-Migration only works after the name has been reserved in ENSv2 and cannot be reversed. Test on Sepolia before migrating valuable names.
+Wrapped-name results include `flags` that describe how the command inferred the migration path, the sender authorization it assumes, and any fuse-dependent behavior to review before broadcasting. For example, a locked name with `CANNOT_SET_RESOLVER` ignores the resolver payload, while `CANNOT_APPROVE` with a frozen token approval is expected to revert.
+
+Migration only works after the name has been reserved in ENSv2 and cannot be reversed. Names in the ENSv1 grace period must be renewed through `ETHRenewerV1` before migration. Test on Sepolia before migrating valuable names.
 
 ### Subnames
 

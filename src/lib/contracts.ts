@@ -250,6 +250,7 @@ export const permissionedResolverAbi = parseAbi([
 export const nameWrapperAbi = parseAbi([
   'function ownerOf(uint256 id) external view returns (address)',
   'function getData(uint256 id) external view returns (address owner, uint32 fuses, uint64 expiry)',
+  'function getApproved(uint256 id) external view returns (address)',
   'function safeTransferFrom(address from, address to, uint256 id, uint256 amount, bytes data) external',
   'function setResolver(bytes32 node, address resolver) external',
   'function setSubnodeRecord(bytes32 parentNode, string label, address owner, address resolver, uint64 ttl, uint32 fuses, uint64 expiry) external returns (bytes32)',
