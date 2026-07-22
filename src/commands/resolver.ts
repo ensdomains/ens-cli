@@ -34,7 +34,7 @@ export const resolverCommands = Cli.create('resolver', {
 })
   .command('deploy', {
     description:
-      'Generate calldata to deploy a per-account permissioned resolver via the ENSv2 VerifiableFactory. The resolver address is determined by (factory, proxyLogic, deployer, salt) and must be deployed from the deployer address. If a resolver already exists at the predicted address, returns alreadyDeployed=true with no transaction needed.',
+      'Generate calldata to deploy an OwnedResolver via the ENSv2 VerifiableFactory. The resolver address is determined by (factory, proxyLogic, deployer, salt) and must be deployed from the deployer address. If a resolver already exists at the predicted address, returns alreadyDeployed=true with no transaction needed.',
     args: z.object({
       deployer: z
         .string()
@@ -115,12 +115,12 @@ export const resolverCommands = Cli.create('resolver', {
         nextSteps: alreadyDeployed
           ? [
               `Resolver already deployed at ${proxy.address}. No transaction needed.`,
-              `Pass it as --resolver ${proxy.address} when running ens register.`,
+              `Pass it as --resolver ${proxy.address} when registering, migrating, or creating a subname.`,
             ]
           : [
               `1. Broadcast this transaction from ${deployer}`,
               `2. Confirm the resolver is live at ${proxy.address}`,
-              `3. Pass it as --resolver ${proxy.address} when running ens register`,
+              `3. Pass it as --resolver ${proxy.address} when registering, migrating, or creating a subname`,
             ],
       }
     },

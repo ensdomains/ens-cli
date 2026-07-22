@@ -102,7 +102,7 @@ Transaction must be sent from the name owner (or an approved operator).
 
 ### Resolver deployment (ENSv2)
 
-ENSv2 names use per-account `PermissionedResolver` proxies. The v1 Public Resolver can't be reused because its authorisation is gated by the v1 registry, which knows nothing about v2-registered names. Each owner can deploy their own resolver through the v2 `VerifiableFactory`; ENSv2 registration and subname creation commands use that resolver by default when it is already deployed.
+ENSv2 names use an OwnedResolver, a per-account `PermissionedResolver` proxy. The v1 Public Resolver can't be reused for updates because its authorisation is gated by the v1 registry, which knows nothing about v2-registered names. Each owner can deploy their own resolver through the v2 `VerifiableFactory`; ENSv2 registration, migration, and subname creation commands use that resolver by default when it is already deployed.
 
 ```sh
 # Predicts the CREATE2 address and emits deployProxy calldata.
@@ -157,7 +157,9 @@ ens migrate myname.eth \
 
 The transaction must be sent by the current ENSv1 token owner or an approved operator. Unwrapped names transfer the Base Registrar ERC-721 to the unlocked controller. Wrapped names transfer the NameWrapper ERC-1155 to either the unlocked or locked controller based on `CANNOT_UNWRAP`. Locked migration deploys its own `WrapperRegistry`, so `--subregistry` is ignored in that case.
 
-Wrapped-name results include `flags` that describe how the command inferred the migration path, the sender authorization it assumes, and any fuse-dependent behavior to review before broadcasting. For example, a locked name with `CANNOT_SET_RESOLVER` ignores the resolver payload, while `CANNOT_APPROVE` with a frozen token approval is expected to revert.
+Unless `--resolver` is provided, migration uses the new owner's canonical OwnedResolver when it is already deployed. Otherwise it preserves the current ENSv1 resolver for record continuity and returns a flag recommending that an OwnedResolver be deployed before regenerating the migration. Locked names with `CANNOT_SET_RESOLVER` are excluded because their resolver payload is ignored.
+
+Wrapped-name flags also describe how the command inferred the migration path, the sender authorization it assumes, and any fuse-dependent behavior to review before broadcasting. For example, `CANNOT_APPROVE` with a frozen token approval is expected to revert.
 
 Migration only works after the name has been reserved in ENSv2 and cannot be reversed. Names in the ENSv1 grace period must be renewed through `ETHRenewerV1` before migration. Test on Sepolia before migrating valuable names.
 

@@ -11,6 +11,7 @@ import {
 } from '../lib/contracts.ts'
 import { activeV2Deployment, clientFromContext, globalEnv, globalOptions } from '../lib/context.ts'
 import { eth2ldLabel, validateName } from '../lib/utils.ts'
+import { resolveDeployedOwnedResolver } from '../lib/v2.ts'
 
 // ENSv1 NameWrapper fuse bitmap values mirrored from INameWrapper.sol.
 // Source: https://github.com/ensdomains/ens-contracts/blob/3b1cc225ccdf64581d5fdc81db574f51ba5c8c09/contracts/wrapper/INameWrapper.sol#L10-L16
@@ -40,7 +41,9 @@ export const migrateCommand = Cli.create('migrate', {
       resolver: z
         .string()
         .optional()
-        .describe('ENSv2 resolver after migration (default: current ENSv1 resolver)'),
+        .describe(
+          'ENSv2 resolver after migration (default: deployed OwnedResolver for the v2 owner, otherwise current ENSv1 resolver)',
+        ),
       subregistry: z
         .string()
         .optional()
@@ -59,7 +62,7 @@ export const migrateCommand = Cli.create('migrate', {
   ),
   examples: [
     {
-      description: 'Migrate a reserved Sepolia name with its current owner and resolver',
+      description: 'Migrate a reserved Sepolia name with its current owner and default resolver',
       args: { name: 'myname.eth' },
       options: { chain: 'sepolia' },
     },
@@ -185,7 +188,21 @@ export const migrateCommand = Cli.create('migrate', {
         : zeroAddress
 
     const owner = c.options.owner ? getAddress(c.options.owner) : currentOwner
-    const resolver = c.options.resolver ? getAddress(c.options.resolver) : currentResolver
+    const resolverPayloadIgnored = kind === 'wrapped-locked' && (fuses & CANNOT_SET_RESOLVER) !== 0
+    const ownedResolver =
+      c.options.resolver == null && !resolverPayloadIgnored
+        ? await resolveDeployedOwnedResolver({
+            client,
+            factory: v2Deployment.resolverFactory,
+            proxyLogic: v2Deployment.resolverProxyLogic,
+            owner,
+          })
+        : zeroAddress
+    const resolver = c.options.resolver
+      ? getAddress(c.options.resolver)
+      : !isAddressEqual(ownedResolver, zeroAddress)
+        ? ownedResolver
+        : currentResolver
     const subregistry = c.options.subregistry ? getAddress(c.options.subregistry) : zeroAddress
     const lockedController = c.options.lockedController
       ? getAddress(c.options.lockedController)
@@ -203,12 +220,21 @@ export const migrateCommand = Cli.create('migrate', {
     }
 
     const flags: string[] = []
+    if (
+      c.options.resolver == null &&
+      !resolverPayloadIgnored &&
+      isAddressEqual(ownedResolver, zeroAddress)
+    ) {
+      flags.push(
+        `Recommendation: no canonical OwnedResolver is deployed for ${owner}, so the current ENSv1 resolver is being reused. Verify it authorizes the ENSv2 owner to update records, or run "ens resolver deploy ${owner} --chain ${chain}" and regenerate this migration with --resolver <address>.`,
+      )
+    }
     if (wrapped) {
       flags.push(
         `Assumption: registry ownership by ${nameWrapper} identifies the name as wrapped; the CANNOT_UNWRAP fuse selects the ${kind} path.`,
         'Assumption: the sender will be the current token owner or an approved operator; authorization is not checked.',
       )
-      if (kind === 'wrapped-locked' && (fuses & CANNOT_SET_RESOLVER) !== 0) {
+      if (resolverPayloadIgnored) {
         flags.push(
           'Warning: CANNOT_SET_RESOLVER causes the resolver payload to be ignored; the v1 resolver is preserved and a known PublicResolver may be replaced with PublicResolverV2.',
         )
