@@ -112,6 +112,10 @@ function encodeSetReverse(name: string): `0x${string}` {
   })
 }
 
+function normalizeReverseName(name: string): string {
+  return name === '' ? '' : validateName(name)
+}
+
 function encodeBatchOperation(node: `0x${string}`, op: BatchOperation): `0x${string}` {
   switch (op.type) {
     case 'address':
@@ -148,9 +152,13 @@ export const setCommands = Cli.create('set', {
         args: { name: 'myname.eth' },
         description: "Set the sender's reverse record to myname.eth",
       },
+      {
+        args: { name: '' },
+        description: "Clear the sender's reverse record",
+      },
     ],
     async run(c) {
-      const name = validateName(c.args.name)
+      const name = normalizeReverseName(c.args.name)
       const reverseRegistrar = await resolveReverseRegistrar(c)
       const data = encodeSetReverse(name)
       return { to: reverseRegistrar, data, value: '0', name, reverseRegistrar }
