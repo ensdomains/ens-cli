@@ -100,6 +100,17 @@ ens resolver set myname.eth --resolver 0xResolverAddr --chain sepolia
 
 Transaction must be sent from the name owner (or an approved operator).
 
+### Primary name
+
+Set the transaction sender's primary name.
+
+```sh
+ens set name myname.eth
+# Returns: { to, data, value, name, reverseRegistrar }
+```
+
+The generated transaction must be sent from the address whose reverse record should be changed. A functional primary name requires a bidirectional match: the name must forward-resolve to that same address, and the address's reverse record must point back to the name.
+
 ### Resolver deployment (ENSv2)
 
 ENSv2 names use per-account `PermissionedResolver` proxies. The v1 Public Resolver can't be reused because its authorisation is gated by the v1 registry, which knows nothing about v2-registered names. Each owner can deploy their own resolver through the v2 `VerifiableFactory`; ENSv2 registration and subname creation commands use that resolver by default when it is already deployed.
