@@ -28,6 +28,9 @@ type BatchOperation = z.infer<typeof batchOperationSchema>
 
 type SetContext = Context & { options: { resolver?: string } }
 
+const TARGET_RESOLVER_HINT =
+  'Uses --resolver when provided; otherwise resolves the target resolver via the Universal Resolver.'
+
 async function resolveTargetResolver(c: SetContext, name: string): Promise<`0x${string}`> {
   if (c.options.resolver) return getAddress(c.options.resolver)
 
@@ -104,8 +107,8 @@ export const setCommands = Cli.create('set', {
   description: 'Set ENS records (outputs calldata JSON)',
 })
   .command('address', {
-    description:
-      'Generate calldata to set the address record for an ENS name. Resolves the target resolver via the Universal Resolver unless --resolver is passed.',
+    description: 'Generate calldata to set an address record',
+    hint: TARGET_RESOLVER_HINT,
     args: z.object({
       name: z.string().describe('ENS name (e.g. myname.eth)'),
     }),
@@ -118,6 +121,13 @@ export const setCommands = Cli.create('set', {
         }),
       ),
     env: globalEnv,
+    examples: [
+      {
+        args: { name: 'myname.eth' },
+        options: { address: '0x0000000000000000000000000000000000000001' },
+        description: 'Set the default Ethereum address',
+      },
+    ],
     async run(c) {
       const name = validateName(c.args.name)
       const resolverAddress = await resolveTargetResolver(c, name)
@@ -128,8 +138,8 @@ export const setCommands = Cli.create('set', {
     },
   })
   .command('text', {
-    description:
-      'Generate calldata to set a text record for an ENS name. Resolves the target resolver via the Universal Resolver unless --resolver is passed.',
+    description: 'Generate calldata to set a text record',
+    hint: TARGET_RESOLVER_HINT,
     args: z.object({
       name: z.string().describe('ENS name (e.g. myname.eth)'),
     }),
@@ -140,6 +150,13 @@ export const setCommands = Cli.create('set', {
       }),
     ),
     env: globalEnv,
+    examples: [
+      {
+        args: { name: 'myname.eth' },
+        options: { key: 'url', value: 'https://example.com' },
+        description: 'Set a URL text record',
+      },
+    ],
     async run(c) {
       const name = validateName(c.args.name)
       const resolverAddress = await resolveTargetResolver(c, name)
@@ -149,8 +166,8 @@ export const setCommands = Cli.create('set', {
     },
   })
   .command('contenthash', {
-    description:
-      'Generate calldata to set the content hash for an ENS name. Resolves the target resolver via the Universal Resolver unless --resolver is passed.',
+    description: 'Generate calldata to set a contenthash record',
+    hint: TARGET_RESOLVER_HINT,
     args: z.object({
       name: z.string().describe('ENS name (e.g. myname.eth)'),
     }),
@@ -160,6 +177,15 @@ export const setCommands = Cli.create('set', {
       }),
     ),
     env: globalEnv,
+    examples: [
+      {
+        args: { name: 'myname.eth' },
+        options: {
+          hash: '0xe30101701220e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855',
+        },
+        description: 'Set an IPFS contenthash',
+      },
+    ],
     async run(c) {
       const name = validateName(c.args.name)
       const resolverAddress = await resolveTargetResolver(c, name)
@@ -169,8 +195,8 @@ export const setCommands = Cli.create('set', {
     },
   })
   .command('batch', {
-    description:
-      'Generate multicall calldata to set multiple records in a single transaction. Pass a JSON array of operations. Resolves the target resolver via the Universal Resolver unless --resolver is passed.',
+    description: 'Generate multicall calldata to set multiple records',
+    hint: `Pass a JSON array of record operations. ${TARGET_RESOLVER_HINT}`,
     args: z.object({
       name: z.string().describe('ENS name (e.g. myname.eth)'),
     }),
@@ -184,6 +210,15 @@ export const setCommands = Cli.create('set', {
       }),
     ),
     env: globalEnv,
+    examples: [
+      {
+        args: { name: 'myname.eth' },
+        options: {
+          data: `'[{"type":"text","key":"url","value":"https://example.com"}]'`,
+        },
+        description: 'Set records in a single transaction',
+      },
+    ],
     async run(c) {
       const name = validateName(c.args.name)
       const resolverAddress = await resolveTargetResolver(c, name)
