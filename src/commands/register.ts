@@ -64,7 +64,7 @@ export const registerCommands = Cli.create('register', {
           .string()
           .optional()
           .describe(
-            'Resolver address (defaults to chain public resolver on ENSv1; on ENSv2, defaults to the owner owned resolver if deployed, otherwise zero address).',
+            "Resolver address (defaults to chain public resolver on ENSv1; on ENSv2, defaults to the owner's deployed OwnedResolver, otherwise zero address).",
           ),
         subregistry: z
           .string()
@@ -117,7 +117,7 @@ export const registerCommands = Cli.create('register', {
 
         const resolverHint =
           resolver === zeroAddress
-            ? `Optional: deploy a per-account resolver with: ens resolver deploy ${owner} --chain ${chain}, then re-run commit/reveal with --resolver <addr>.`
+            ? `Optional: deploy an OwnedResolver with: ens resolver deploy ${owner} --chain ${chain}, then re-run commit/reveal with --resolver <addr>.`
             : undefined
 
         return {
@@ -227,7 +227,7 @@ export const registerCommands = Cli.create('register', {
           .string()
           .optional()
           .describe(
-            'Resolver address (must match commit; defaults to deployed owner owned resolver on ENSv2, otherwise zero)',
+            "Resolver address (must match commit; defaults to the owner's deployed OwnedResolver on ENSv2, otherwise zero)",
           ),
         subregistry: z
           .string()

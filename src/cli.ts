@@ -10,6 +10,7 @@ import { setCommands } from './commands/set.ts'
 import { subnameCommands } from './commands/subname.ts'
 import { subregistryCommands } from './commands/subregistry.ts'
 import { whoisCommand } from './commands/whois.ts'
+import { migrateCommand } from './commands/migrate.ts'
 
 export const cli = Cli.create('ens', {
   version: packageJson.version,
@@ -31,3 +32,4 @@ export const cli = Cli.create('ens', {
   .command(setCommands)
   .command(subnameCommands)
   .command(subregistryCommands)
+  .command(migrateCommand)

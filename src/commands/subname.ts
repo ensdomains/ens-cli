@@ -29,7 +29,7 @@ export const subnameCommands = Cli.create('subname', {
         .string()
         .optional()
         .describe(
-          'Resolver address for the subname (defaults to deployed owner owned resolver on ENSv2, chain public resolver on ENSv1)',
+          "Resolver address for the subname (defaults to the owner's deployed OwnedResolver on ENSv2, chain public resolver on ENSv1)",
         ),
       subregistry: z
         .string()
