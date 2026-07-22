@@ -3,7 +3,12 @@ import { zeroAddress } from 'viem'
 import { encodeFunctionData, getAddress } from 'viem/utils'
 import { getEnsResolver, namehash } from 'viem/ens'
 import { validateName, asHex } from '../lib/utils.ts'
-import { publicResolverAbi } from '../lib/contracts.ts'
+import {
+  addresses,
+  ensRegistryAbi,
+  publicResolverAbi,
+  reverseRegistrarAbi,
+} from '../lib/contracts.ts'
 import {
   globalOptions,
   globalEnv,
@@ -27,6 +32,8 @@ const batchOperationSchema = z.discriminatedUnion('type', [
 type BatchOperation = z.infer<typeof batchOperationSchema>
 
 type SetContext = Context & { options: { resolver?: string } }
+
+const REVERSE_NAMESPACE = 'addr.reverse'
 
 async function resolveTargetResolver(c: SetContext, name: string): Promise<`0x${string}`> {
   if (c.options.resolver) return getAddress(c.options.resolver)
@@ -80,6 +87,29 @@ function encodeSetContenthash(node: `0x${string}`, hash: string): `0x${string}` 
   })
 }
 
+async function resolveReverseRegistrar(c: Context): Promise<`0x${string}`> {
+  const { client, chain } = clientFromContext(c)
+  const reverseRegistrar = await client.readContract({
+    address: addresses[chain].registry,
+    abi: ensRegistryAbi,
+    functionName: 'owner',
+    args: [namehash(REVERSE_NAMESPACE)],
+  })
+
+  if (reverseRegistrar === zeroAddress) {
+    throw new Error(`No ETH reverse registrar owns "${REVERSE_NAMESPACE}"`)
+  }
+  return reverseRegistrar
+}
+
+function encodeSetReverse(name: string): `0x${string}` {
+  return encodeFunctionData({
+    abi: reverseRegistrarAbi,
+    functionName: 'setName',
+    args: [name],
+  })
+}
+
 function encodeBatchOperation(node: `0x${string}`, op: BatchOperation): `0x${string}` {
   switch (op.type) {
     case 'address':
@@ -103,6 +133,29 @@ const resolverOption = z.object({
 export const setCommands = Cli.create('set', {
   description: 'Set ENS records (outputs calldata JSON)',
 })
+  .command('name', {
+    description: 'Generate calldata to set an ETH reverse record',
+    hint: 'The transaction sender is the address whose reverse record will be changed. A functional primary name requires bidirectional resolution: the name must forward-resolve to that same address.',
+    args: z.object({
+      name: z
+        .string()
+        .describe("ENS name to store in the sender's reverse record (e.g. myname.eth)"),
+    }),
+    options: globalOptions.omit({ universalResolver: true }),
+    env: globalEnv,
+    examples: [
+      {
+        args: { name: 'myname.eth' },
+        description: "Set the sender's reverse record to myname.eth",
+      },
+    ],
+    async run(c) {
+      const name = validateName(c.args.name)
+      const reverseRegistrar = await resolveReverseRegistrar(c)
+      const data = encodeSetReverse(name)
+      return { to: reverseRegistrar, data, value: '0', name, reverseRegistrar }
+    },
+  })
   .command('address', {
     description:
       'Generate calldata to set the address record for an ENS name. Resolves the target resolver via the Universal Resolver unless --resolver is passed.',

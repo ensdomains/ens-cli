@@ -205,6 +205,10 @@ export const publicResolverAbi = [
   },
 ] as const
 
+export const reverseRegistrarAbi = parseAbi([
+  'function setName(string name) external returns (bytes32)',
+])
+
 export const baseRegistrarAbi = parseAbi([
   'function nameExpires(uint256 id) external view returns (uint256)',
 ])
