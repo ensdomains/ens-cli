@@ -68,7 +68,7 @@ export const resolverCommands = Cli.create('resolver', {
           .string()
           .optional()
           .describe(
-            'JSON array of initial record operations (requires --name; same format as ens set batch --data): [{"type":"text","key":"url","value":"https://..."},{"type":"address","address":"0x...","chainId":10},{"type":"address","address":"0x...","coinType":0},{"type":"contenthash","hash":"0x..."}]',
+            'JSON array of initial record operations (requires --name; same format as "ens set batch" --data): [{"type":"text","key":"url","value":"https://..."},{"type":"address","address":"0x...","chainId":10},{"type":"address","address":"0x...","coinType":0},{"type":"contenthash","hash":"0x..."}]',
           ),
       }),
     ),

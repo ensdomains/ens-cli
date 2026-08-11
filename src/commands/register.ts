@@ -65,7 +65,7 @@ export const registerCommands = Cli.create('register', {
           .string()
           .optional()
           .describe(
-            "Resolver address. ENSv1 defaults to the chain public resolver. ENSv2 uses the owner's deployed OwnedResolver when available, but otherwise uses zero address (no resolver); generate one with ens resolver deploy and pass its predicted address explicitly.",
+            'Resolver address. ENSv1 defaults to the chain public resolver. ENSv2 uses the owner\'s deployed OwnedResolver when available, but otherwise uses zero address (no resolver); generate one with "ens resolver deploy" and pass its predicted address explicitly.',
           ),
         subregistry: z
           .string()
@@ -80,7 +80,7 @@ export const registerCommands = Cli.create('register', {
           .boolean()
           .optional()
           .describe(
-            'ENSv1 only: request a reverse record (default: false). Does not deploy/select a resolver or set ENSv2 forward resolution; use ens set name after ENSv2 registration.',
+            'ENSv1 only: request a reverse record (default: false). Does not deploy/select a resolver or set ENSv2 forward resolution; use "ens set name" after ENSv2 registration.',
           ),
       }),
     ),
@@ -261,7 +261,7 @@ export const registerCommands = Cli.create('register', {
           .boolean()
           .optional()
           .describe(
-            'ENSv1 only: request the reverse record made in the commit. Does not deploy/select an ENSv2 resolver; use ens set name after ENSv2 registration.',
+            'ENSv1 only: request the reverse record made in the commit. Does not deploy/select an ENSv2 resolver; use "ens set name" after ENSv2 registration.',
           ),
       }),
     ),
