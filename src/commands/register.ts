@@ -49,6 +49,7 @@ export const registerCommands = Cli.create('register', {
   .command('commit', {
     description:
       'Generate the commitment transaction for registering an ENS name. Returns calldata JSON and a secret that MUST be saved for the reveal step. Wait at least 60 seconds after the commit transaction is mined before calling reveal.',
+    hint: 'For a new ENSv2 resolver, "ens resolver deploy <owner> --name <name> --records <json>" can initialize records in the deployment transaction and avoid a later "ens set batch" transaction. Pass its predicted resolver address to both commit and reveal.',
     args: z.object({
       name: z.string().describe('ENS name to register (e.g. myname.eth)'),
     }),

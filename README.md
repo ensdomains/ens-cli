@@ -123,11 +123,20 @@ ENSv2 names use an OwnedResolver, a per-account `PermissionedResolver` proxy. Th
 # alreadyDeployed=true short-circuits when the resolver already exists.
 ens resolver deploy 0xYourAddress --chain sepolia --json
 # Returns: { to, data, value, resolver, alreadyDeployed, ... }
+
+# Deploy a new resolver and initialize records atomically.
+ens resolver deploy 0xYourAddress \
+  --name myname.eth \
+  --records '[{"type":"address","address":"0xYourAddress"},{"type":"text","key":"url","value":"https://example.com"}]' \
+  --chain sepolia \
+  --json
 ```
 
 The resolver address is derived from `(factory, proxyLogic, deployer, salt)`, so the deploy transaction must be sent from `deployer`. The salt defaults to `keccak256(abi.encode(keccak256("OwnedResolver"), owner, 0))` where `owner` is the admin the resolver is initialized with — the canonical scheme shared with the contracts-v2 setup script and the manager app's migration flow, so the resolver can be rediscovered from the owner address alone.
 
-Options: `--admin` (defaults to deployer), `--salt` (decimal or 0x hex), `--role-bitmap` (decimal or 0x hex, default `0x1111…1111`).
+`--name` and `--records` must be used together. On a new resolver, the address, text, and contenthash operations use `PermissionedResolver.initialize(..., setters)` to initialize records in the deployment transaction, avoiding a later `ens set batch` transaction. If the resolver is already deployed, use `ens set batch` instead. The predicted resolver address can be used in a registration commitment before deployment, so deployment and record initialization can happen during the commitment waiting period.
+
+Other options: `--admin` (defaults to deployer), `--salt` (decimal or 0x hex), `--role-bitmap` (decimal or 0x hex, default `0x1111…1111`).
 
 ### Subregistry management (ENSv2)
 

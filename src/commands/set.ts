@@ -2,7 +2,7 @@ import { Cli, z } from 'incur'
 import { zeroAddress } from 'viem'
 import { encodeFunctionData, getAddress } from 'viem/utils'
 import { getEnsResolver, namehash } from 'viem/ens'
-import { validateName, asHex } from '../lib/utils.ts'
+import { validateName } from '../lib/utils.ts'
 import {
   addresses,
   ensRegistryAbi,
@@ -17,19 +17,7 @@ import {
   type Context,
 } from '../lib/context.ts'
 import { coinTypeOptions, resolveCoinType } from '../lib/cointype.ts'
-
-const batchOperationSchema = z.discriminatedUnion('type', [
-  z.object({
-    type: z.literal('address'),
-    address: z.string(),
-    coinType: z.number().optional(),
-    chainId: z.number().optional(),
-  }),
-  z.object({ type: z.literal('text'), key: z.string(), value: z.string() }),
-  z.object({ type: z.literal('contenthash'), hash: z.string() }),
-])
-
-type BatchOperation = z.infer<typeof batchOperationSchema>
+import { encodeRecordOperation, parseRecordOperations } from '../lib/records.ts'
 
 type SetContext = Context & { options: { resolver?: string } }
 
@@ -59,34 +47,15 @@ async function resolveTargetResolver(c: SetContext, name: string): Promise<`0x${
 }
 
 function encodeSetAddr(node: `0x${string}`, address: string, coinType?: number): `0x${string}` {
-  if (coinType != null) {
-    return encodeFunctionData({
-      abi: publicResolverAbi,
-      functionName: 'setAddr',
-      args: [node, BigInt(coinType), asHex(address, 'address')],
-    })
-  }
-  return encodeFunctionData({
-    abi: publicResolverAbi,
-    functionName: 'setAddr',
-    args: [node, getAddress(address)],
-  })
+  return encodeRecordOperation(node, { type: 'address', address, coinType })
 }
 
 function encodeSetText(node: `0x${string}`, key: string, value: string): `0x${string}` {
-  return encodeFunctionData({
-    abi: publicResolverAbi,
-    functionName: 'setText',
-    args: [node, key, value],
-  })
+  return encodeRecordOperation(node, { type: 'text', key, value })
 }
 
 function encodeSetContenthash(node: `0x${string}`, hash: string): `0x${string}` {
-  return encodeFunctionData({
-    abi: publicResolverAbi,
-    functionName: 'setContenthash',
-    args: [node, asHex(hash, 'contenthash')],
-  })
+  return encodeRecordOperation(node, { type: 'contenthash', hash })
 }
 
 async function resolveReverseRegistrar(c: Context): Promise<`0x${string}`> {
@@ -114,17 +83,6 @@ function encodeSetReverse(name: string): `0x${string}` {
 
 function normalizeReverseName(name: string): string {
   return name === '' ? '' : validateName(name)
-}
-
-function encodeBatchOperation(node: `0x${string}`, op: BatchOperation): `0x${string}` {
-  switch (op.type) {
-    case 'address':
-      return encodeSetAddr(node, op.address, resolveCoinType(op))
-    case 'text':
-      return encodeSetText(node, op.key, op.value)
-    case 'contenthash':
-      return encodeSetContenthash(node, op.hash)
-  }
 }
 
 const resolverOption = z.object({
@@ -281,8 +239,8 @@ export const setCommands = Cli.create('set', {
       const name = validateName(c.args.name)
       const resolverAddress = await resolveTargetResolver(c, name)
       const node = namehash(name)
-      const operations = z.array(batchOperationSchema).parse(JSON.parse(c.options.data))
-      const calls = operations.map((op) => encodeBatchOperation(node, op))
+      const operations = parseRecordOperations(c.options.data)
+      const calls = operations.map((operation) => encodeRecordOperation(node, operation))
 
       const data = encodeFunctionData({
         abi: publicResolverAbi,
