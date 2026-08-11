@@ -85,9 +85,9 @@ ens register reveal myname.eth \
 # Returns: { to, data, value }
 ```
 
-Options for both commands: `--duration` (seconds, default 1 year), `--resolver`, `--reverse-record`.
+Options for both commands: `--duration` (seconds, default 1 year) and `--resolver`. `--reverse-record` is ENSv1-only; it does not deploy or select an ENSv2 resolver and does not create forward resolution. After ENSv2 registration, use `ens set name <name>` to set the owner's reverse record separately.
 
-On ENSv2 (Sepolia), `--resolver` defaults to the owner's deployed permissioned resolver when the canonical owned resolver already exists; otherwise it falls back to the zero address. To register with a working resolver when one is not deployed yet, deploy a per-account permissioned resolver first (see below) and pass its address via `--resolver`.
+On ENSv2 (Sepolia), `--resolver` defaults to the owner's deployed permissioned resolver when the canonical owned resolver already exists; otherwise it falls back to the zero address, registering a name with no resolver. Do not broadcast a zero-resolver commitment unless that is intentional. Generate `ens resolver deploy` first (see below), optionally initialize the name's address/text records in that deployment, and pass its predicted `resolver` address explicitly to both commit and reveal. The predicted address can be committed before its deployment transaction is broadcast, so the resolver can be deployed during the commitment wait.
 
 ### Resolver management
 
