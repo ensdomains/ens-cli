@@ -36,7 +36,7 @@ export const resolverCommands = Cli.create('resolver', {
   .command('deploy', {
     description:
       'Generate calldata to deploy an OwnedResolver via the ENSv2 VerifiableFactory. The resolver address is determined by (factory, proxyLogic, deployer, salt) and must be deployed from the deployer address. If a resolver already exists at the predicted address, returns alreadyDeployed=true with no transaction needed.',
-    hint: 'Use --name and --records together to initialize address, text, or contenthash records in the resolver deployment transaction, avoiding a later record-setting transaction. Initial records only work for a new resolver; use "ens set batch" when it is already deployed.',
+    hint: 'Omit both --name and --records to deploy a blank resolver. To initialize records during deployment, provide both; --records must be a non-empty JSON array. For registration, usually initialize the owner\'s ETH address with --records \'[{"type":"address","address":"<owner>"}]\'. Additional record types use the same format as "ens set batch" --data. Initial records only work for a new resolver; use "ens set batch" when it is already deployed.',
     args: z.object({
       deployer: z
         .string()
@@ -67,12 +67,21 @@ export const resolverCommands = Cli.create('resolver', {
         records: z
           .string()
           .optional()
-          .describe(
-            'JSON array of initial record operations (requires --name; same format as "ens set batch" --data): [{"type":"text","key":"url","value":"https://..."},{"type":"address","address":"0x...","chainId":10},{"type":"address","address":"0x...","coinType":0},{"type":"contenthash","hash":"0x..."}]',
-          ),
+          .describe('Non-empty JSON array of initial record operations (requires --name)'),
       }),
     ),
     env: globalEnv,
+    examples: [
+      {
+        description: "Deploy a resolver and initialize the owner's ETH address",
+        args: { deployer: '0x0000000000000000000000000000000000000001' },
+        options: {
+          name: 'myname.eth',
+          records: `'[{"type":"address","address":"0x0000000000000000000000000000000000000001"}]'`,
+          chain: 'sepolia',
+        },
+      },
+    ],
     async run(c) {
       const { client, chain } = clientFromContext(c)
       const v2Deployment = v2DeploymentForChain(chain)
