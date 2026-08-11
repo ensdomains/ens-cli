@@ -248,7 +248,7 @@ export const verifiableFactoryAbi = parseAbi([
 ])
 
 export const permissionedResolverAbi = parseAbi([
-  'function initialize(address admin, uint256 roleBitmap) external',
+  'function initialize(address admin, uint256 roleBitmap, bytes[] setters) external',
 ])
 
 export const nameWrapperAbi = parseAbi([
@@ -276,16 +276,17 @@ export const addresses = {
     resolver: '0xE99638b40E4Fff0129D56f03b55b6bbC4BBE49b5',
     universalResolver: '0xeEeEEEeE14D718C2B47D9923Deab1335E144EeEe',
     nameWrapper: '0x0635513f179D50A207757E05759CbD106d7dFcE8',
+    // Canonical ENSv2 deployment from 2026-07-30 (contracts-v2 PR #388).
     v2: {
-      registry: '0xDEDB92913A25abE1f7BCDD85D8A344a43B398B67',
-      registrar: '0x8c2E866B439358c41AE05De9cbE8A00BFEFafFcA',
-      paymentToken: '0x3DfC8b53dAFa5eBbb071a8B97678Ab534Ed838D9',
-      resolverFactory: '0xD2a632D8a8b67c2c4398c255CbD7aF8dd7236198',
-      resolverImplementation: '0xdcE5205A553573FFd47629327DDdf36186022FfA',
-      resolverProxyLogic: '0x917C561a74Df398646e06f3FFAA51DB8e8330C5A',
-      subregistryImplementation: '0x0F99e7Ea74903AfCB7224d0354fD7428A6f92917',
-      lockedMigrationController: '0xF91c34ED840889Ed96F806f882fD50506A336Edb',
-      unlockedMigrationController: '0x056138Ef5660F7113a3B0ADC08ac3683310e7FBC',
+      registry: '0xBDC85dD5b15D7ecb354cd7cb6f2c50b4f2c4F0E2',
+      registrar: '0xa88553F454b77203B0D036A05c894d555EAAa2Cc',
+      paymentToken: '0x768F42455A2D082E23ceeF7d51e5787C82d67a39',
+      resolverFactory: '0x10dC6333CDFe1FCEf624c6e0a8221b91804Cd7ef',
+      resolverImplementation: '0x9EAe5C2730a7dD16BDD1DeE6421a1B91e3B0365e',
+      resolverProxyLogic: '0xA136BeE4E37B44586242e516a39893EfD54315e9',
+      subregistryImplementation: '0x624a25d67B59D587752EbEc8DdeD8827dAe52050',
+      lockedMigrationController: '0x5c39E36a69A9897F08954c71aCB1F36E0Bd4f409',
+      unlockedMigrationController: '0x2FCf83232b93bD29C59dB18AaA1D4b62e9f9FC73',
     },
   },
 } as const

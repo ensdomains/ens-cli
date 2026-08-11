@@ -29,6 +29,18 @@ function parseSalt(salt: string | undefined, owner: `0x${string}`): bigint {
   return defaultOwnedResolverSalt(owner)
 }
 
+export function encodePermissionedResolverInitializeData(admin: `0x${string}`, roleBitmap: bigint) {
+  return encodeFunctionData({
+    abi: permissionedResolverAbi,
+    functionName: 'initialize',
+    // Resolver deployment creates an empty resolver. The deployed three-argument
+    // initializer optionally multicalls record setters while initialization is
+    // active; this command has no initial-record options, so preserve the prior
+    // behavior with an explicitly empty batch.
+    args: [admin, roleBitmap, []],
+  })
+}
+
 export const resolverCommands = Cli.create('resolver', {
   description: 'ENSv2 resolver utilities',
 })
@@ -73,11 +85,7 @@ export const resolverCommands = Cli.create('resolver', {
       const salt = parseSalt(c.options.salt, admin)
       const roleBitmap = c.options.roleBitmap ? BigInt(c.options.roleBitmap) : DEFAULT_ROLE_BITMAP
 
-      const initializeData = encodeFunctionData({
-        abi: permissionedResolverAbi,
-        functionName: 'initialize',
-        args: [admin, roleBitmap],
-      })
+      const initializeData = encodePermissionedResolverInitializeData(admin, roleBitmap)
       const data = encodeFunctionData({
         abi: verifiableFactoryAbi,
         functionName: 'deployProxy',
