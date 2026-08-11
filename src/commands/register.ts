@@ -49,7 +49,7 @@ export const registerCommands = Cli.create('register', {
   .command('commit', {
     description:
       'Generate the commitment transaction for registering an ENS name. Returns calldata JSON and a secret that MUST be saved for the reveal step. Wait at least 60 seconds after the commit transaction is mined before calling reveal.',
-    hint: 'ENSv2: do not commit with the zero resolver unless a resolverless name is intentional. If the owner has no OwnedResolver, first run "ens resolver deploy <owner> --name <name> --records <json>", then pass its predicted resolver address explicitly to both commit and reveal. The resolver can be deployed during the commitment wait. --reverse-record is ENSv1-only; use "ens set name <name>" after ENSv2 registration.',
+    hint: 'Do not commit with the zero resolver unless a resolverless name is intentional. On ENSv2, omitting --resolver may produce zero when the owner has no deployed OwnedResolver. In that case, first run "ens resolver deploy <owner> --name <name> --records <json>", then pass its predicted resolver address explicitly to both commit and reveal. The resolver can be deployed during the commitment wait. --reverse-record only applies during ENSv1 registration; use "ens set name <name>" after ENSv2 registration.',
     args: z.object({
       name: z.string().describe('ENS name to register (e.g. myname.eth)'),
     }),
