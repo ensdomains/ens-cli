@@ -2,7 +2,7 @@ import { z } from 'incur'
 import { toCoinType } from 'viem/ens'
 
 export const coinTypeOptions = z.object({
-  coinType: z.coerce.number().optional().describe('ENSIP-9 coin type (e.g. 0 for BTC, 60 for ETH)'),
+  coinType: z.coerce.number().optional().describe('ENSIP-9 coin type (60=ETH, 0=BTC)'),
   chainId: z.coerce
     .number()
     .optional()

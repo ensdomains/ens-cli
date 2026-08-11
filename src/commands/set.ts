@@ -212,17 +212,13 @@ export const setCommands = Cli.create('set', {
   })
   .command('batch', {
     description: 'Generate multicall calldata to set multiple records',
-    hint: `Pass a JSON array of record operations. ${RESOLVER_SELECTION_HINT}`,
+    hint: `ETH uses coin type 60: {"type":"address","address":"0x...","coinType":60}. Use chainId for another EVM chain or coinType for another asset (0=BTC). ${RESOLVER_SELECTION_HINT}`,
     args: z.object({
       name: z.string().describe('ENS name (e.g. myname.eth)'),
     }),
     options: globalOptions.merge(resolverOption).merge(
       z.object({
-        data: z
-          .string()
-          .describe(
-            'JSON array of operations: [{"type":"text","key":"url","value":"https://..."},{"type":"address","address":"0x...","chainId":10},{"type":"address","address":"0x...","coinType":0},{"type":"contenthash","hash":"0x..."}]',
-          ),
+        data: z.string().describe('JSON array of address, text, or contenthash operations'),
       }),
     ),
     env: globalEnv,

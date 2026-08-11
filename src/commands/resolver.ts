@@ -36,7 +36,7 @@ export const resolverCommands = Cli.create('resolver', {
   .command('deploy', {
     description:
       'Generate calldata to deploy an OwnedResolver via the ENSv2 VerifiableFactory. The resolver address is determined by (factory, proxyLogic, deployer, salt) and must be deployed from the deployer address. If a resolver already exists at the predicted address, returns alreadyDeployed=true with no transaction needed.',
-    hint: 'Omit both --name and --records to deploy a blank resolver. To initialize records during deployment, provide both; --records must be a non-empty JSON array. For registration, usually initialize the owner\'s ETH address with --records \'[{"type":"address","address":"<owner>"}]\'. Additional record types use the same format as "ens set batch" --data. Initial records only work for a new resolver; use "ens set batch" when it is already deployed.',
+    hint: 'Omit --name/--records for a blank resolver. Otherwise provide both and a non-empty operation array. ETH uses coin type 60: --records \'[{"type":"address","address":"<owner>","coinType":60}]\'. Other operations match "ens set batch" --data; use it if the resolver already exists.',
     args: z.object({
       deployer: z
         .string()
@@ -77,7 +77,7 @@ export const resolverCommands = Cli.create('resolver', {
         args: { deployer: '0x0000000000000000000000000000000000000001' },
         options: {
           name: 'myname.eth',
-          records: `'[{"type":"address","address":"0x0000000000000000000000000000000000000001"}]'`,
+          records: `'[{"type":"address","address":"0x0000000000000000000000000000000000000001","coinType":60}]'`,
           chain: 'sepolia',
         },
       },

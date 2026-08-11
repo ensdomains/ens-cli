@@ -127,7 +127,7 @@ ens resolver deploy 0xYourAddress --chain sepolia --json
 # Deploy a new resolver and initialize records atomically.
 ens resolver deploy 0xYourAddress \
   --name myname.eth \
-  --records '[{"type":"address","address":"0xYourAddress"},{"type":"text","key":"url","value":"https://example.com"}]' \
+  --records '[{"type":"address","address":"0xYourAddress","coinType":60},{"type":"text","key":"url","value":"https://example.com"}]' \
   --chain sepolia \
   --json
 ```
