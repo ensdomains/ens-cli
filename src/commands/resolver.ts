@@ -19,6 +19,7 @@ import {
 } from '../lib/context.ts'
 import { validateName, eth2ldLabel } from '../lib/utils.ts'
 import { ALL_ROLES, computeOwnedResolverAddress, defaultOwnedResolverSalt } from '../lib/v2.ts'
+import { encodeRecordOperation, parseRecordOperations } from '../lib/records.ts'
 
 // ENSv2's EnhancedAccessControl packs each role into a 4-bit group, so a 1 in
 // every nibble grants the admin all roles (ALL_ROLES in the ENSv2 contracts).
@@ -35,6 +36,7 @@ export const resolverCommands = Cli.create('resolver', {
   .command('deploy', {
     description:
       'Generate calldata to deploy an OwnedResolver via the ENSv2 VerifiableFactory. The resolver address is determined by (factory, proxyLogic, deployer, salt) and must be deployed from the deployer address. If a resolver already exists at the predicted address, returns alreadyDeployed=true with no transaction needed.',
+    hint: 'Omit --name/--records for a blank resolver. Otherwise provide both and a non-empty operation array. ETH uses coin type 60: --records \'[{"type":"address","address":"<owner>","coinType":60}]\'. Other operations match "ens set batch" --data; use it if the resolver already exists.',
     args: z.object({
       deployer: z
         .string()
@@ -58,9 +60,28 @@ export const resolverCommands = Cli.create('resolver', {
           .string()
           .optional()
           .describe('Role bitmap granted to the admin as decimal or 0x hex (default: 0x1111…1111)'),
+        name: z
+          .string()
+          .optional()
+          .describe('ENS name whose records should be initialized (requires --records)'),
+        records: z
+          .string()
+          .optional()
+          .describe('Non-empty JSON array of initial record operations (requires --name)'),
       }),
     ),
     env: globalEnv,
+    examples: [
+      {
+        description: "Deploy a resolver and initialize the owner's ETH address",
+        args: { deployer: '0x0000000000000000000000000000000000000001' },
+        options: {
+          name: 'myname.eth',
+          records: `'[{"type":"address","address":"0x0000000000000000000000000000000000000001","coinType":60}]'`,
+          chain: 'sepolia',
+        },
+      },
+    ],
     async run(c) {
       const { client, chain } = clientFromContext(c)
       const v2Deployment = v2DeploymentForChain(chain)
@@ -72,11 +93,25 @@ export const resolverCommands = Cli.create('resolver', {
       const admin = c.options.admin ? getAddress(c.options.admin) : deployer
       const salt = parseSalt(c.options.salt, admin)
       const roleBitmap = c.options.roleBitmap ? BigInt(c.options.roleBitmap) : DEFAULT_ROLE_BITMAP
+      if ((c.options.name == null) !== (c.options.records == null)) {
+        throw new Error('--name and --records must be provided together')
+      }
+      const recordName = c.options.name == null ? undefined : validateName(c.options.name)
+      const recordOperations =
+        c.options.records == null ? [] : parseRecordOperations(c.options.records)
+      if (c.options.records != null && recordOperations.length === 0) {
+        throw new Error('--records must contain at least one record operation')
+      }
+      const recordNode = recordName == null ? undefined : namehash(recordName)
+      const setters =
+        recordNode == null
+          ? []
+          : recordOperations.map((operation) => encodeRecordOperation(recordNode, operation))
 
       const initializeData = encodeFunctionData({
         abi: permissionedResolverAbi,
         functionName: 'initialize',
-        args: [admin, roleBitmap],
+        args: [admin, roleBitmap, setters],
       })
       const data = encodeFunctionData({
         abi: verifiableFactoryAbi,
@@ -93,6 +128,11 @@ export const resolverCommands = Cli.create('resolver', {
 
       const code = await client.getCode({ address: proxy.address })
       const alreadyDeployed = isHex(code) && code !== '0x'
+      if (alreadyDeployed && recordName != null) {
+        throw new Error(
+          `Resolver already deployed at ${proxy.address}; initial records can only be applied during deployment. Run "ens set batch ${recordName} --resolver ${proxy.address} --data <records-json>" instead.`,
+        )
+      }
 
       return {
         to: v2Deployment.resolverFactory,
@@ -111,6 +151,10 @@ export const resolverCommands = Cli.create('resolver', {
         outerSalt: proxy.outerSalt,
         roleBitmap: roleBitmap.toString(),
         roleBitmapHex: toHex(roleBitmap, { size: 32 }),
+        recordName,
+        recordNode,
+        records: recordOperations,
+        setters,
         initializeData,
         nextSteps: alreadyDeployed
           ? [
@@ -119,7 +163,9 @@ export const resolverCommands = Cli.create('resolver', {
             ]
           : [
               `1. Broadcast this transaction from ${deployer}`,
-              `2. Confirm the resolver is live at ${proxy.address}`,
+              recordName == null
+                ? `2. Confirm the resolver is live at ${proxy.address}`
+                : `2. Confirm the resolver and initial records for ${recordName} are live at ${proxy.address}`,
               `3. Pass it as --resolver ${proxy.address} when registering, migrating, or creating a subname`,
             ],
       }

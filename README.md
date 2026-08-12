@@ -85,9 +85,9 @@ ens register reveal myname.eth \
 # Returns: { to, data, value }
 ```
 
-Options for both commands: `--duration` (seconds, default 1 year), `--resolver`, `--reverse-record`.
+Options for both commands: `--duration` (seconds, default 1 year) and `--resolver`. `--reverse-record` is ENSv1-only; it does not deploy or select an ENSv2 resolver and does not create forward resolution. After ENSv2 registration, use `ens set name <name>` to set the owner's reverse record separately.
 
-On ENSv2 (Sepolia), `--resolver` defaults to the owner's deployed permissioned resolver when the canonical owned resolver already exists; otherwise it falls back to the zero address. To register with a working resolver when one is not deployed yet, deploy a per-account permissioned resolver first (see below) and pass its address via `--resolver`.
+On ENSv2 (Sepolia), `--resolver` defaults to the owner's deployed permissioned resolver when the canonical owned resolver already exists; otherwise it falls back to the zero address, registering a name with no resolver. Do not broadcast a zero-resolver commitment unless that is intentional. Generate `ens resolver deploy` first (see below), optionally initialize the name's address/text records in that deployment, and pass its predicted `resolver` address explicitly to both commit and reveal. The predicted address can be committed before its deployment transaction is broadcast, so the resolver can be deployed during the commitment wait.
 
 ### Resolver management
 
@@ -123,11 +123,20 @@ ENSv2 names use an OwnedResolver, a per-account `PermissionedResolver` proxy. Th
 # alreadyDeployed=true short-circuits when the resolver already exists.
 ens resolver deploy 0xYourAddress --chain sepolia --json
 # Returns: { to, data, value, resolver, alreadyDeployed, ... }
+
+# Deploy a new resolver and initialize records atomically.
+ens resolver deploy 0xYourAddress \
+  --name myname.eth \
+  --records '[{"type":"address","address":"0xYourAddress","coinType":60},{"type":"text","key":"url","value":"https://example.com"}]' \
+  --chain sepolia \
+  --json
 ```
 
 The resolver address is derived from `(factory, proxyLogic, deployer, salt)`, so the deploy transaction must be sent from `deployer`. The salt defaults to `keccak256(abi.encode(keccak256("OwnedResolver"), owner, 0))` where `owner` is the admin the resolver is initialized with — the canonical scheme shared with the contracts-v2 setup script and the manager app's migration flow, so the resolver can be rediscovered from the owner address alone.
 
-Options: `--admin` (defaults to deployer), `--salt` (decimal or 0x hex), `--role-bitmap` (decimal or 0x hex, default `0x1111…1111`).
+`--name` and `--records` must be used together. On a new resolver, the address, text, and contenthash operations use `PermissionedResolver.initialize(..., setters)` to initialize records in the deployment transaction, avoiding a later `ens set batch` transaction. If the resolver is already deployed, use `ens set batch` instead. The predicted resolver address can be used in a registration commitment before deployment, so deployment and record initialization can happen during the commitment waiting period.
+
+Other options: `--admin` (defaults to deployer), `--salt` (decimal or 0x hex), `--role-bitmap` (decimal or 0x hex, default `0x1111…1111`).
 
 ### Subregistry management (ENSv2)
 

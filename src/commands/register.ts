@@ -49,6 +49,7 @@ export const registerCommands = Cli.create('register', {
   .command('commit', {
     description:
       'Generate the commitment transaction for registering an ENS name. Returns calldata JSON and a secret that MUST be saved for the reveal step. Wait at least 60 seconds after the commit transaction is mined before calling reveal.',
+    hint: 'Do not commit with the zero resolver unless a resolverless name is intentional. On ENSv2, omitting --resolver may produce zero when the owner has no deployed OwnedResolver; see "ens resolver deploy --help", then pass its predicted address explicitly to both commit and reveal. --reverse-record only applies during ENSv1 registration; use "ens set name <name>" after ENSv2 registration.',
     args: z.object({
       name: z.string().describe('ENS name to register (e.g. myname.eth)'),
     }),
@@ -64,7 +65,7 @@ export const registerCommands = Cli.create('register', {
           .string()
           .optional()
           .describe(
-            "Resolver address (defaults to chain public resolver on ENSv1; on ENSv2, defaults to the owner's deployed OwnedResolver, otherwise zero address).",
+            'Resolver address. ENSv1 defaults to the chain public resolver. ENSv2 uses the owner\'s deployed OwnedResolver when available, but otherwise uses zero address (no resolver); generate one with "ens resolver deploy" and pass its predicted address explicitly.',
           ),
         subregistry: z
           .string()
@@ -75,7 +76,12 @@ export const registerCommands = Cli.create('register', {
           .optional()
           .describe('ENSv2 ERC-20 payment token (default: chain v2 payment token)'),
         referrer: z.string().optional().describe('Referrer bytes32 hex (default: zero bytes32)'),
-        reverseRecord: z.boolean().optional().describe('Set reverse record (default: false)'),
+        reverseRecord: z
+          .boolean()
+          .optional()
+          .describe(
+            'ENSv1 only: request a reverse record (default: false). Does not deploy/select a resolver or set ENSv2 forward resolution; use "ens set name" after ENSv2 registration.',
+          ),
       }),
     ),
     env: globalEnv,
@@ -117,8 +123,25 @@ export const registerCommands = Cli.create('register', {
 
         const resolverHint =
           resolver === zeroAddress
-            ? `Optional: deploy an OwnedResolver with: ens resolver deploy ${owner} --chain ${chain}, then re-run commit/reveal with --resolver <addr>.`
+            ? `WARNING: This commitment registers ${c.args.name} with no resolver. Do not broadcast it unless that is intentional. Run: ens resolver deploy ${owner} --name ${c.args.name} --records '[{"type":"address","address":"${owner}"}]' --chain ${chain}. Then re-run commit with --resolver <returned resolver> and pass that same address to reveal.`
             : undefined
+        const reverseRecordHint = c.options.reverseRecord
+          ? `--reverse-record is ENSv1-only and is ignored for ENSv2. It does not deploy/select a resolver or create forward resolution; run "ens set name ${c.args.name}" after registration instead.`
+          : undefined
+        const nextSteps =
+          resolver === zeroAddress
+            ? [
+                '1. Do not broadcast this commitment unless a resolverless registration is intentional.',
+                `2. Run: ens resolver deploy ${owner} --name ${c.args.name} --records '[{"type":"address","address":"${owner}"}]' --chain ${chain}`,
+                '3. Re-run commit with --resolver <returned resolver>. Use that exact resolver again on reveal.',
+              ]
+            : [
+                '1. Broadcast this commit transaction',
+                '2. Wait at least 60 seconds after the tx is mined',
+                `3. Run: ens price ${c.args.name} --chain ${chain} --paymentToken ${paymentToken}`,
+                `4. Approve ${v2Deployment.registrar} to spend the total ERC-20 price`,
+                `5. Run: ens register reveal ${c.args.name} --owner ${owner} --chain ${chain} --secret ${secret} --paymentToken ${paymentToken} --resolver ${resolver}`,
+              ]
 
         return {
           to: v2Deployment.registrar,
@@ -144,13 +167,8 @@ export const registerCommands = Cli.create('register', {
           registrar: v2Deployment.registrar,
           version: 'v2',
           resolverHint,
-          nextSteps: [
-            '1. Broadcast this commit transaction',
-            '2. Wait at least 60 seconds after the tx is mined',
-            `3. Run: ens price ${c.args.name} --chain ${chain} --paymentToken ${paymentToken}`,
-            `4. Approve ${v2Deployment.registrar} to spend the total ERC-20 price`,
-            `5. Run: ens register reveal ${c.args.name} --owner ${owner} --chain ${chain} --secret ${secret} --paymentToken ${paymentToken} --resolver ${resolver}`,
-          ],
+          reverseRecordHint,
+          nextSteps,
         }
       }
 
@@ -206,6 +224,7 @@ export const registerCommands = Cli.create('register', {
   .command('reveal', {
     description:
       'Generate the registration transaction to reveal a committed ENS name. Requires the secret from the commit step and a value (in wei) from the price command.',
+    hint: 'Pass the exact same --resolver value used for commit; do not rely on resolver auto-detection across the two steps. A commitment made with the zero resolver cannot gain one at reveal—you must deploy/predict a resolver and create a new commitment. --reverse-record is ENSv1-only; use "ens set name <name>" after ENSv2 registration.',
     args: z.object({
       name: z.string().describe('ENS name to register (e.g. myname.eth)'),
     }),
@@ -227,7 +246,7 @@ export const registerCommands = Cli.create('register', {
           .string()
           .optional()
           .describe(
-            "Resolver address (must match commit; defaults to the owner's deployed OwnedResolver on ENSv2, otherwise zero)",
+            'Resolver address (must exactly match commit). On ENSv2, pass it explicitly; if omitted, auto-detection may differ from commit and invalidate the reveal.',
           ),
         subregistry: z
           .string()
@@ -238,7 +257,12 @@ export const registerCommands = Cli.create('register', {
           .optional()
           .describe('ENSv2 ERC-20 payment token (must be approved before reveal)'),
         referrer: z.string().optional().describe('Referrer bytes32 hex (must match commit)'),
-        reverseRecord: z.boolean().optional().describe('Set reverse record (must match commit)'),
+        reverseRecord: z
+          .boolean()
+          .optional()
+          .describe(
+            'ENSv1 only: request the reverse record made in the commit. Does not deploy/select an ENSv2 resolver; use "ens set name" after ENSv2 registration.',
+          ),
       }),
     ),
     env: globalEnv,
@@ -264,6 +288,13 @@ export const registerCommands = Cli.create('register', {
           ? getAddress(c.options.paymentToken)
           : v2Deployment.paymentToken
         const referrer = c.options.referrer ? asHex(c.options.referrer, 'referrer') : zeroHash
+        const resolverHint =
+          resolver === zeroAddress
+            ? 'WARNING: This reveal registers the name with no resolver. The resolver must exactly match the commitment; if zero was unintentional, deploy/predict an OwnedResolver and make a new commitment with its address.'
+            : undefined
+        const reverseRecordHint = c.options.reverseRecord
+          ? `--reverse-record is ENSv1-only and is ignored for ENSv2; run "ens set name ${c.args.name}" after registration instead.`
+          : undefined
 
         const data = encodeFunctionData({
           abi: ethRegistrarAbi,
@@ -292,6 +323,8 @@ export const registerCommands = Cli.create('register', {
           registry: v2Deployment.registry,
           registrar: v2Deployment.registrar,
           version: 'v2',
+          resolverHint,
+          reverseRecordHint,
           note: `Approve ${v2Deployment.registrar} to spend the ERC-20 total from ens price before broadcasting this transaction.`,
         }
       }
