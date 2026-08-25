@@ -14,7 +14,7 @@ import {
   globalOptions,
   globalEnv,
   clientFromContext,
-  isV2Active,
+  activeV2Name,
   v2DeploymentForChain,
 } from '../lib/context.ts'
 import { validateName, eth2ldLabel } from '../lib/utils.ts'
@@ -187,10 +187,10 @@ export const resolverCommands = Cli.create('resolver', {
       const { client, chain } = clientFromContext(c)
       const name = validateName(c.args.name)
       const resolver = getAddress(c.options.resolver)
-      const v2 = await isV2Active(c, name)
-      const v2Deployment = v2.isV2 ? v2DeploymentForChain(chain) : undefined
+      const v2 = await activeV2Name(c, name)
 
-      if (v2.isV2 && v2Deployment) {
+      if (v2) {
+        const v2Deployment = v2.deployment
         const label = eth2ldLabel(name)
         if (label == null) {
           throw new Error('ENSv2 resolver set currently only supports 2LD .eth names')

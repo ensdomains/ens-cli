@@ -1,15 +1,10 @@
 import { z } from 'incur'
-import {
-  AbiDecodingZeroDataError,
-  ContractFunctionRevertedError,
-  ContractFunctionZeroDataError,
-  zeroAddress,
-} from 'viem'
+import { isAddressEqual, zeroAddress, type ContractFunctionReturnType } from 'viem'
 import { labelhash } from 'viem/ens'
 import { createEnsClient } from './client.ts'
 import { addresses, universalResolverAbi, v2RegistryAbi, type Chain } from './contracts.ts'
 import { eth2ldLabelForName } from './utils.ts'
-import { V2_STATUS_REGISTERED } from './v2.ts'
+import { V2_STATUS_AVAILABLE, V2_STATUS_REGISTERED } from './v2.ts'
 
 export const globalOptions = z.object({
   rpc: z.string().optional().describe('Ethereum RPC URL'),
@@ -46,28 +41,11 @@ export function universalResolverAddress(c: Context, chain: Chain): `0x${string}
   return universalResolverOverride(c) ?? addresses[chain].universalResolver
 }
 
-/** Contract-level probe failures mean the UR lacks v2; transport/RPC errors must propagate. */
-function isV2ProbeContractFailure(err: unknown): boolean {
-  if (!(err instanceof Error) || !('walk' in err)) return false
-  const walkable = err as Error & { walk: (fn: (e: Error) => boolean) => Error | undefined }
-  return !!walkable.walk(
-    (e) =>
-      e instanceof ContractFunctionRevertedError ||
-      e instanceof ContractFunctionZeroDataError ||
-      e instanceof AbiDecodingZeroDataError,
-  )
-}
-
 // Switch to help with logic around ENSv2.
 // Without a name, check whether the UR supports v2. With a name, also require
-// its anchoring .eth 2LD to be registered (rather than only reserved) in v2.
-type V2RegistryState = {
-  status: number
-  expiry: bigint
-  latestOwner: `0x${string}`
-  tokenId: bigint
-  resource: bigint
-}
+// its anchoring .eth 2LD to be registered or previously registered in v2.
+const UNIVERSAL_RESOLVER_V2_INTERFACE_ID = '0xf99a5e06'
+type V2RegistryState = ContractFunctionReturnType<typeof v2RegistryAbi, 'view', 'getState'>
 
 type V2Inactive = { readonly isV2: false }
 type V2Active = { readonly isV2: true; readonly ethRegistry: `0x${string}` }
@@ -77,21 +55,23 @@ export function isV2Active(c: Context): Promise<V2Active | V2Inactive>
 export function isV2Active(c: Context, name: string): Promise<V2NameActive | V2Inactive>
 export async function isV2Active(c: Context, name?: string) {
   const { client, chain } = clientFromContext(c)
+  const resolver = universalResolverAddress(c, chain)
 
-  let ethRegistry: `0x${string}`
-  try {
-    ethRegistry = await client.readContract({
-      address: universalResolverAddress(c, chain),
-      abi: universalResolverAbi,
-      functionName: 'findCanonicalRegistry',
-      args: ['0x0365746800'],
-    })
-  } catch (err) {
-    if (isV2ProbeContractFailure(err)) return { isV2: false } as const
-    throw err
-  }
+  const supportsV2 = await client.readContract({
+    address: resolver,
+    abi: universalResolverAbi,
+    functionName: 'supportsInterface',
+    args: [UNIVERSAL_RESOLVER_V2_INTERFACE_ID],
+  })
+  if (!supportsV2) return { isV2: false } as const
 
-  if (ethRegistry === zeroAddress) return { isV2: false } as const
+  const ethRegistry = await client.readContract({
+    address: resolver,
+    abi: universalResolverAbi,
+    functionName: 'findCanonicalRegistry',
+    args: ['0x0365746800'],
+  })
+  if (ethRegistry === zeroAddress) throw new Error('ENSv2 Universal Resolver has no .eth registry')
 
   if (name != null) {
     const label = eth2ldLabelForName(name)
@@ -103,7 +83,10 @@ export async function isV2Active(c: Context, name?: string) {
       functionName: 'getState',
       args: [BigInt(labelhash(label))],
     })
-    if (nameState.status !== V2_STATUS_REGISTERED) return { isV2: false } as const
+    const migrated =
+      nameState.status === V2_STATUS_REGISTERED ||
+      (nameState.status === V2_STATUS_AVAILABLE && nameState.latestOwner !== zeroAddress)
+    if (!migrated) return { isV2: false } as const
 
     return { isV2: true, ethRegistry, nameState } as const
   }
@@ -111,10 +94,30 @@ export async function isV2Active(c: Context, name?: string) {
   return { isV2: true, ethRegistry } as const
 }
 
-export async function activeV2Deployment(c: Context, name?: string) {
-  const { isV2 } = name == null ? await isV2Active(c) : await isV2Active(c, name)
-  if (!isV2) return undefined
-  return v2DeploymentForChain(c.options.chain ?? 'mainnet')
+function configuredV2Deployment(c: Context, ethRegistry: `0x${string}`) {
+  const deployment = v2DeploymentForChain(c.options.chain ?? 'mainnet')
+  if (!deployment) {
+    throw new Error(
+      `ENSv2 deployment is not configured for chain "${c.options.chain ?? 'mainnet'}"`,
+    )
+  }
+  if (!isAddressEqual(deployment.registry, ethRegistry)) {
+    throw new Error(
+      `Configured ENSv2 registry ${deployment.registry} does not match Universal Resolver registry ${ethRegistry}`,
+    )
+  }
+  return deployment
+}
+
+export async function activeV2Deployment(c: Context) {
+  const v2 = await isV2Active(c)
+  return v2.isV2 ? configuredV2Deployment(c, v2.ethRegistry) : undefined
+}
+
+export async function activeV2Name(c: Context, name: string) {
+  const v2 = await isV2Active(c, name)
+  if (!v2.isV2) return undefined
+  return { ...v2, deployment: configuredV2Deployment(c, v2.ethRegistry) }
 }
 
 export function v2DeploymentForChain(chain: Chain) {

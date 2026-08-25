@@ -223,6 +223,7 @@ export const ensRegistryAbi = parseAbi([
 ])
 
 export const universalResolverAbi = parseAbi([
+  'function supportsInterface(bytes4 interfaceId) external view returns (bool)',
   'function findCanonicalRegistry(bytes name) external view returns (address)',
   'function findResolver(bytes name) external view returns ((address resolver, bytes32 node, uint256 offset))',
   'error DNSDecodingFailed(bytes dns)',
