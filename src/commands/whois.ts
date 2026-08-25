@@ -45,8 +45,8 @@ export const whoisCommand = Cli.create('whois', {
   env: globalEnv,
   async run(c) {
     const { client, chain } = clientFromContext(c)
-    const { isV2, ethRegistry } = await isV2Active(c)
     const name = validateName(c.args.name)
+    const { isV2, ethRegistry } = await isV2Active(c, name)
     const node = namehash(name)
     const label = eth2ldLabel(name)
 

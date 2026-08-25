@@ -187,7 +187,7 @@ export const resolverCommands = Cli.create('resolver', {
       const { client, chain } = clientFromContext(c)
       const name = validateName(c.args.name)
       const resolver = getAddress(c.options.resolver)
-      const v2Deployment = await activeV2Deployment(c)
+      const v2Deployment = await activeV2Deployment(c, name)
 
       if (v2Deployment) {
         const label = eth2ldLabel(name)

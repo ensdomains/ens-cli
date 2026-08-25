@@ -10,6 +10,7 @@ import {
   getV2ParentRegistryForName,
   parseBigIntOption,
   resolveDeployedOwnedResolver,
+  splitSubname,
 } from '../lib/v2.ts'
 
 const TTL = 0n
@@ -65,7 +66,8 @@ export const subnameCommands = Cli.create('subname', {
   async run(c) {
     const { client, chain } = clientFromContext(c)
     const name = validateName(c.args.name)
-    const v2Deployment = await activeV2Deployment(c)
+    const { parent: parentName } = splitSubname(name)
+    const v2Deployment = await activeV2Deployment(c, parentName === 'eth' ? undefined : parentName)
 
     if (v2Deployment) {
       const parent = await getV2ParentRegistryForName({
