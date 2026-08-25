@@ -83,9 +83,13 @@ export async function isV2Active(c: Context, name?: string) {
       functionName: 'getState',
       args: [BigInt(labelhash(label))],
     })
+    // Natural expiry preserves latestOwner; explicit unregister instead bumps the
+    // token version stored in the low 32 bits. Either indicates prior v2 ownership.
+    const hasRegistrationHistory = (nameState.tokenId & 0xffff_ffffn) !== 0n
     const migrated =
       nameState.status === V2Status.REGISTERED ||
-      (nameState.status === V2Status.AVAILABLE && nameState.latestOwner !== zeroAddress)
+      (nameState.status === V2Status.AVAILABLE &&
+        (nameState.latestOwner !== zeroAddress || hasRegistrationHistory))
     if (!migrated) return { isV2: false } as const
 
     return { isV2: true, ethRegistry, nameState } as const
