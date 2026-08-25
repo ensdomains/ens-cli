@@ -18,7 +18,12 @@ import {
   v2DeploymentForChain,
 } from '../lib/context.ts'
 import { validateName, eth2ldLabel } from '../lib/utils.ts'
-import { ALL_ROLES, computeOwnedResolverAddress, defaultOwnedResolverSalt } from '../lib/v2.ts'
+import {
+  ALL_ROLES,
+  V2Status,
+  computeOwnedResolverAddress,
+  defaultOwnedResolverSalt,
+} from '../lib/v2.ts'
 import { encodeRecordOperation, parseRecordOperations } from '../lib/records.ts'
 
 // ENSv2's EnhancedAccessControl packs each role into a 4-bit group, so a 1 in
@@ -198,7 +203,7 @@ export const resolverCommands = Cli.create('resolver', {
         const anyId = BigInt(labelhash(label))
 
         const { status, latestOwner, tokenId } = v2.nameState
-        if (status !== 2) {
+        if (status !== V2Status.REGISTERED) {
           throw new Error(
             `"${name}" is not registered on the v2 registry (status=${status}). Register it first via ens register.`,
           )

@@ -11,7 +11,7 @@ import {
 } from '../lib/contracts.ts'
 import { activeV2Deployment, clientFromContext, globalEnv, globalOptions } from '../lib/context.ts'
 import { eth2ldLabel, validateName } from '../lib/utils.ts'
-import { resolveDeployedOwnedResolver } from '../lib/v2.ts'
+import { V2Status, resolveDeployedOwnedResolver } from '../lib/v2.ts'
 
 // ENSv1 NameWrapper fuse bitmap values mirrored from INameWrapper.sol.
 // Source: https://github.com/ensdomains/ens-contracts/blob/3b1cc225ccdf64581d5fdc81db574f51ba5c8c09/contracts/wrapper/INameWrapper.sol#L10-L16
@@ -19,12 +19,6 @@ const CANNOT_UNWRAP = 1 // bit 0
 const CANNOT_TRANSFER = 4 // bit 2
 const CANNOT_SET_RESOLVER = 8 // bit 3
 const CANNOT_APPROVE = 64 // bit 6
-
-// Solidity assigns zero-based ordinals to IPermissionedRegistry.Status:
-// AVAILABLE = 0, RESERVED = 1, REGISTERED = 2.
-// Source: https://github.com/ensdomains/contracts-v2/blob/48b3e2d39513b9dd32ef1850877a29009bc807b9/contracts/src/registry/interfaces/IPermissionedRegistry.sol#L16-L20
-const V2_STATUS_RESERVED = 1
-const V2_STATUS_REGISTERED = 2
 
 export const migrateCommand = Cli.create('migrate', {
   description: 'Migrate a .eth name from ENSv1 to ENSv2.',
@@ -126,10 +120,10 @@ export const migrateCommand = Cli.create('migrate', {
       client.getBlock(),
     ])
 
-    if (status === V2_STATUS_REGISTERED) {
+    if (status === V2Status.REGISTERED) {
       throw new Error(`"${name}" is already registered in ENSv2`)
     }
-    if (status !== V2_STATUS_RESERVED) {
+    if (status !== V2Status.RESERVED) {
       throw new Error(
         `"${name}" is not reserved for ENSv1 migration in ENSv2 (status=${status}). Only pre-migrated RESERVED names can be migrated.`,
       )

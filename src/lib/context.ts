@@ -4,7 +4,7 @@ import { labelhash } from 'viem/ens'
 import { createEnsClient } from './client.ts'
 import { addresses, universalResolverAbi, v2RegistryAbi, type Chain } from './contracts.ts'
 import { eth2ldLabelForName } from './utils.ts'
-import { V2_STATUS_AVAILABLE, V2_STATUS_REGISTERED } from './v2.ts'
+import { V2Status } from './v2.ts'
 
 export const globalOptions = z.object({
   rpc: z.string().optional().describe('Ethereum RPC URL'),
@@ -84,8 +84,8 @@ export async function isV2Active(c: Context, name?: string) {
       args: [BigInt(labelhash(label))],
     })
     const migrated =
-      nameState.status === V2_STATUS_REGISTERED ||
-      (nameState.status === V2_STATUS_AVAILABLE && nameState.latestOwner !== zeroAddress)
+      nameState.status === V2Status.REGISTERED ||
+      (nameState.status === V2Status.AVAILABLE && nameState.latestOwner !== zeroAddress)
     if (!migrated) return { isV2: false } as const
 
     return { isV2: true, ethRegistry, nameState } as const

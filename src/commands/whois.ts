@@ -17,15 +17,14 @@ import {
   v2RegistryAbi,
 } from '../lib/contracts.ts'
 import { validateName, eth2ldLabel } from '../lib/utils.ts'
+import { V2Status } from '../lib/v2.ts'
 
 function toNullableAddress(value: `0x${string}`) {
   return value === zeroAddress ? null : value
 }
 
-const statusLabels = ['AVAILABLE', 'RESERVED', 'REGISTERED'] as const
-
 function mapStatus(status: number | bigint) {
-  return statusLabels[Number(status)] ?? 'UNKNOWN'
+  return V2Status[Number(status)] ?? 'UNKNOWN'
 }
 
 function formatExpiry(expiry: bigint) {

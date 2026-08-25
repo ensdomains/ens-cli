@@ -14,8 +14,12 @@ import {
 import { labelhash, namehash } from 'viem/ens'
 import { v2RegistryAbi } from './contracts.ts'
 
-export const V2_STATUS_AVAILABLE = 0
-export const V2_STATUS_REGISTERED = 2
+// Mirrors IPermissionedRegistry.Status in contracts-v2.
+export enum V2Status {
+  AVAILABLE,
+  RESERVED,
+  REGISTERED,
+}
 export const ROLE_REGISTRAR = 1n << 0n
 export const ROLE_REGISTER_RESERVED = 1n << 4n
 export const ROLE_SET_PARENT = 1n << 8n
