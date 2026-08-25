@@ -3,13 +3,14 @@ import { zeroAddress } from 'viem'
 import { encodeFunctionData, getAddress, isAddressEqual } from 'viem/utils'
 import { labelhash, namehash } from 'viem/ens'
 import { addresses, ensRegistryAbi, nameWrapperAbi, v2RegistryAbi } from '../lib/contracts.ts'
-import { globalOptions, globalEnv, clientFromContext, activeV2Deployment } from '../lib/context.ts'
+import { globalOptions, globalEnv, clientFromContext, activeV2Name } from '../lib/context.ts'
 import { durationFromOption, validateName } from '../lib/utils.ts'
 import {
   V2_DEFAULT_OWNER_ROLE_BITMAP,
   getV2ParentRegistryForName,
   parseBigIntOption,
   resolveDeployedOwnedResolver,
+  splitSubname,
 } from '../lib/v2.ts'
 
 const TTL = 0n
@@ -65,18 +66,19 @@ export const subnameCommands = Cli.create('subname', {
   async run(c) {
     const { client, chain } = clientFromContext(c)
     const name = validateName(c.args.name)
-    const v2Deployment = await activeV2Deployment(c)
+    const { parent: parentName } = splitSubname(name)
+    if (parentName === 'eth') {
+      throw new Error(`Use ens register to create 2LD .eth names. Got: ${name}`)
+    }
+    const v2 = await activeV2Name(c, parentName)
 
-    if (v2Deployment) {
+    if (v2) {
+      const v2Deployment = v2.deployment
       const parent = await getV2ParentRegistryForName({
         client,
         rootRegistry: v2Deployment.registry,
         name,
       })
-
-      if (parent.parent === 'eth') {
-        throw new Error(`Use ens register to create 2LD .eth names. Got: ${name}`)
-      }
 
       if (isAddressEqual(parent.registry, zeroAddress)) {
         throw new Error(

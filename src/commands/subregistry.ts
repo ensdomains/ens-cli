@@ -6,7 +6,7 @@ import { globalOptions, globalEnv, clientFromContext, activeV2Deployment } from 
 import { durationFromOption, validateName } from '../lib/utils.ts'
 import {
   ALL_ROLES,
-  V2_STATUS_REGISTERED,
+  V2Status,
   defaultUserRegistrySalt,
   formatSalt,
   getV2ParentRegistryForName,
@@ -227,7 +227,7 @@ export const subregistryCommands = Cli.create('subregistry', {
         args: [v2LabelId(parent.label)],
       })
 
-      if (status !== V2_STATUS_REGISTERED) {
+      if (status !== V2Status.REGISTERED) {
         throw new Error(
           `"${name}" is not registered in its ENSv2 parent registry (status=${status}). Register it first.`,
         )

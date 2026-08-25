@@ -27,6 +27,12 @@ export function eth2ldLabel(name: string): string | null {
   return parts.length === 2 && parts[1] === 'eth' ? parts[0]! : null
 }
 
+/** Returns the .eth 2LD that anchors a name (e.g. "name" for "sub.name.eth"). */
+export function eth2ldLabelForName(name: string): string | null {
+  const parts = name.split('.')
+  return parts.length >= 2 && parts[parts.length - 1] === 'eth' ? parts[parts.length - 2]! : null
+}
+
 export function extractLabel(name: string): string {
   const normalized = validateName(name)
   const label = eth2ldLabel(normalized)
