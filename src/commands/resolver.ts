@@ -14,7 +14,7 @@ import {
   globalOptions,
   globalEnv,
   clientFromContext,
-  activeV2Deployment,
+  isV2Active,
   v2DeploymentForChain,
 } from '../lib/context.ts'
 import { validateName, eth2ldLabel } from '../lib/utils.ts'
@@ -187,21 +187,17 @@ export const resolverCommands = Cli.create('resolver', {
       const { client, chain } = clientFromContext(c)
       const name = validateName(c.args.name)
       const resolver = getAddress(c.options.resolver)
-      const v2Deployment = await activeV2Deployment(c, name)
+      const v2 = await isV2Active(c, name)
+      const v2Deployment = v2.isV2 ? v2DeploymentForChain(chain) : undefined
 
-      if (v2Deployment) {
+      if (v2.isV2 && v2Deployment) {
         const label = eth2ldLabel(name)
         if (label == null) {
           throw new Error('ENSv2 resolver set currently only supports 2LD .eth names')
         }
         const anyId = BigInt(labelhash(label))
 
-        const { status, latestOwner, tokenId } = await client.readContract({
-          address: v2Deployment.registry,
-          abi: v2RegistryAbi,
-          functionName: 'getState',
-          args: [anyId],
-        })
+        const { status, latestOwner, tokenId } = v2.nameState
         if (status !== 2) {
           throw new Error(
             `"${name}" is not registered on the v2 registry (status=${status}). Register it first via ens register.`,

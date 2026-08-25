@@ -61,6 +61,20 @@ function isV2ProbeContractFailure(err: unknown): boolean {
 // Switch to help with logic around ENSv2.
 // Without a name, check whether the UR supports v2. With a name, also require
 // its anchoring .eth 2LD to be registered (rather than only reserved) in v2.
+type V2RegistryState = {
+  status: number
+  expiry: bigint
+  latestOwner: `0x${string}`
+  tokenId: bigint
+  resource: bigint
+}
+
+type V2Inactive = { readonly isV2: false }
+type V2Active = { readonly isV2: true; readonly ethRegistry: `0x${string}` }
+type V2NameActive = V2Active & { readonly nameState: V2RegistryState }
+
+export function isV2Active(c: Context): Promise<V2Active | V2Inactive>
+export function isV2Active(c: Context, name: string): Promise<V2NameActive | V2Inactive>
 export async function isV2Active(c: Context, name?: string) {
   const { client, chain } = clientFromContext(c)
 
@@ -83,20 +97,22 @@ export async function isV2Active(c: Context, name?: string) {
     const label = eth2ldLabelForName(name)
     if (label == null) return { isV2: false } as const
 
-    const { status } = await client.readContract({
+    const nameState = await client.readContract({
       address: ethRegistry,
       abi: v2RegistryAbi,
       functionName: 'getState',
       args: [BigInt(labelhash(label))],
     })
-    if (status !== V2_STATUS_REGISTERED) return { isV2: false } as const
+    if (nameState.status !== V2_STATUS_REGISTERED) return { isV2: false } as const
+
+    return { isV2: true, ethRegistry, nameState } as const
   }
 
   return { isV2: true, ethRegistry } as const
 }
 
 export async function activeV2Deployment(c: Context, name?: string) {
-  const { isV2 } = await isV2Active(c, name)
+  const { isV2 } = name == null ? await isV2Active(c) : await isV2Active(c, name)
   if (!isV2) return undefined
   return v2DeploymentForChain(c.options.chain ?? 'mainnet')
 }

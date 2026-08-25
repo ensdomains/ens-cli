@@ -46,41 +46,34 @@ export const whoisCommand = Cli.create('whois', {
   async run(c) {
     const { client, chain } = clientFromContext(c)
     const name = validateName(c.args.name)
-    const { isV2, ethRegistry } = await isV2Active(c, name)
+    const v2 = await isV2Active(c, name)
     const node = namehash(name)
     const label = eth2ldLabel(name)
 
-    if (isV2) {
+    if (v2.isV2) {
       // TODO: handle non-2LD .eth names
       if (label == null) {
         throw new Error(`v2 whois only supports 2LD .eth names for now`)
       }
 
-      const [{ resolver }, { status, expiry, latestOwner, tokenId, resource }] = await Promise.all([
+      const { ethRegistry, nameState } = v2
+      const { status, expiry, latestOwner, tokenId, resource } = nameState
+      const [{ resolver }, owner] = await Promise.all([
         client.readContract({
           address: universalResolverAddress(c, chain),
           abi: universalResolverAbi,
           functionName: 'findResolver',
           args: [bytesToHex(packetToBytes(name))],
         }),
-        client.readContract({
-          address: ethRegistry,
-          abi: v2RegistryAbi,
-          functionName: 'getState',
-          args: [BigInt(labelhash(label))],
-        }),
-      ])
-
-      // ownerOf reverts for nonexistent tokens, so only read it for registered names
-      const owner =
         mapStatus(status) === 'REGISTERED'
-          ? await client.readContract({
+          ? client.readContract({
               address: ethRegistry,
               abi: v2RegistryAbi,
               functionName: 'ownerOf',
               args: [tokenId],
             })
-          : zeroAddress
+          : Promise.resolve(zeroAddress),
+      ])
 
       return {
         name,
