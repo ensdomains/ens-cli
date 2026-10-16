@@ -230,6 +230,13 @@ ens set batch myname.eth --data '[
 ]'
 ```
 
+### Feedback
+
+```sh
+# Send feedback about the CLI to the maintainers
+ens feedback "It would be great to have a command for X"
+```
+
 ## Configuration
 
 **RPC endpoint** (in order of precedence):
