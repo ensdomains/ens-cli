@@ -93,6 +93,13 @@ export const ethRegistrarControllerAbi = [
 
 export const ethRegistrarAbi = [
   {
+    name: 'ETH_REGISTRY',
+    type: 'function',
+    stateMutability: 'view',
+    inputs: [],
+    outputs: [{ name: '', type: 'address' }],
+  },
+  {
     name: 'commit',
     type: 'function',
     stateMutability: 'nonpayable',
@@ -224,8 +231,9 @@ export const ensRegistryAbi = parseAbi([
 
 export const universalResolverAbi = parseAbi([
   'function supportsInterface(bytes4 interfaceId) external view returns (bool)',
-  'function findCanonicalRegistry(bytes name) external view returns (address)',
-  'function findResolver(bytes name) external view returns ((address resolver, bytes32 node, uint256 offset))',
+  'function isENSv2() external view returns (bool)',
+  'function ROOT_REGISTRY() external view returns (address)',
+  'function findResolver(bytes name) external view returns (address resolver, bytes32 node, uint256 offset)',
   'error DNSDecodingFailed(bytes dns)',
   'error LabelIsTooLong(string label)',
   'error LabelIsEmpty()',
@@ -241,15 +249,26 @@ export const v2RegistryAbi = parseAbi([
 ])
 
 export const userRegistryAbi = parseAbi([
-  'function initialize(address rootAccount, uint256 roleBitmap) external',
+  'function initialize((address account, uint256 roleBitmap)[] grants) external',
 ])
 
 export const verifiableFactoryAbi = parseAbi([
+  'function proxyLogic() external view returns (address)',
   'function deployProxy(address implementation, uint256 salt, bytes data) external returns (address)',
 ])
 
 export const permissionedResolverAbi = parseAbi([
-  'function initialize(address admin, uint256 roleBitmap, bytes[] setters) external',
+  'function initialize((address account, uint256 roleBitmap)[] grants, bytes[] calls) external',
+  'function supportsInterface(bytes4 interfaceId) external view returns (bool)',
+  'function setAddress(bytes name, uint256 coinType, bytes addressBytes) external',
+  'function setText(bytes name, string key, string value) external',
+  'function setContenthash(bytes name, bytes hash) external',
+])
+
+// Shared by ETHRegistrar and ETHRenewerV1.
+export const ethRenewerAbi = parseAbi([
+  'function renew((string label, uint64 duration, bytes32 referrer) data, address paymentToken) external',
+  'function getRenewPrice(string label, uint64 duration, address paymentToken) external view returns (uint256)',
 ])
 
 export const nameWrapperAbi = parseAbi([
@@ -269,6 +288,18 @@ export const addresses = {
     resolver: '0xF29100983E058B709F3D539b0c765937B804AC15',
     universalResolver: '0xeEeEEEeE14D718C2B47D9923Deab1335E144EeEe',
     nameWrapper: '0xD4416b13d2b3a9aBae7AcD5D6C2BbDBE25686401',
+    // 2026-10-02 deployment (contracts-v2 deploy/mainnet-v2-20261002). Only used
+    // once the Universal Resolver reports ENSv2, so this is inert until cutover.
+    v2: {
+      registrar: '0xD6D8369e55c94Ae8AFA714E6cF7AB5bE54D5CC81',
+      renewerV1: '0x56c447F308F463A01121C41E72b0E7e7557fCb68',
+      paymentToken: '0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48', // USDC
+      resolverFactory: '0x77510ba162dfeA3d8989e3f0928a691B345730D2',
+      resolverImplementation: '0x565b0F456a04Ac9b48758190e90030623Cff57C5',
+      subregistryImplementation: '0x75FF9AdBcFcE2469B097AC68f6Ae650EaE1351Bb',
+      lockedMigrationController: '0xa19d4d49230200b3e81290A87dd12ea916aF7BE6',
+      unlockedMigrationController: '0xaB821Ca676CF2e0790Fa273526a165CFa86aEB64',
+    },
   },
   sepolia: {
     registry: '0x00000000000C2E074eC69A0dFb2997BA6C7d2e1e',
@@ -277,17 +308,16 @@ export const addresses = {
     resolver: '0xE99638b40E4Fff0129D56f03b55b6bbC4BBE49b5',
     universalResolver: '0xeEeEEEeE14D718C2B47D9923Deab1335E144EeEe',
     nameWrapper: '0x0635513f179D50A207757E05759CbD106d7dFcE8',
-    // Canonical ENSv2 deployment from 2026-07-30 (contracts-v2 PR #388).
+    // 2026-10-01 deployment (contracts-v2 07e55a05).
     v2: {
-      registry: '0xBDC85dD5b15D7ecb354cd7cb6f2c50b4f2c4F0E2',
-      registrar: '0xa88553F454b77203B0D036A05c894d555EAAa2Cc',
-      paymentToken: '0x768F42455A2D082E23ceeF7d51e5787C82d67a39',
-      resolverFactory: '0x10dC6333CDFe1FCEf624c6e0a8221b91804Cd7ef',
-      resolverImplementation: '0x9EAe5C2730a7dD16BDD1DeE6421a1B91e3B0365e',
-      resolverProxyLogic: '0xA136BeE4E37B44586242e516a39893EfD54315e9',
-      subregistryImplementation: '0x624a25d67B59D587752EbEc8DdeD8827dAe52050',
-      lockedMigrationController: '0x5c39E36a69A9897F08954c71aCB1F36E0Bd4f409',
-      unlockedMigrationController: '0x2FCf83232b93bD29C59dB18AaA1D4b62e9f9FC73',
+      registrar: '0xf633e7FC17e2bbE0D0965D18ec1821dcB754a3d3',
+      renewerV1: '0xf2ece44980778966b8a0FccB3A9E339440f6e045',
+      paymentToken: '0x240b0316Df57887DBBE58b586508b19e633a14aa',
+      resolverFactory: '0xDa70306C98E97eCe36F997a21368e53298572991',
+      resolverImplementation: '0x115eb53F0c60696633855F90b138178Fb40b2b2C',
+      subregistryImplementation: '0x9BD8a88719068D09ecee662f36C0E3856708366a',
+      lockedMigrationController: '0x6029a063d69b09D23c52a754a90E4FE43aDac3A8',
+      unlockedMigrationController: '0x2a35B94DF22cc7354570be2284655E2CDC0e64A2',
     },
   },
 } as const

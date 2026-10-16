@@ -92,7 +92,6 @@ export const subnameCommands = Cli.create('subname', {
         : await resolveDeployedOwnedResolver({
             client,
             factory: v2Deployment.resolverFactory,
-            proxyLogic: v2Deployment.resolverProxyLogic,
             owner,
           })
       const childSubregistry = c.options.subregistry

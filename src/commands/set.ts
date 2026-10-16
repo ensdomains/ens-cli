@@ -17,7 +17,13 @@ import {
   type Context,
 } from '../lib/context.ts'
 import { coinTypeOptions, resolveCoinType } from '../lib/cointype.ts'
-import { encodeRecordOperation, parseRecordOperations } from '../lib/records.ts'
+import {
+  encodeRecordOperation,
+  encodeV2RecordOperation,
+  supportsV2RecordSetters,
+  parseRecordOperations,
+  type RecordOperation,
+} from '../lib/records.ts'
 
 type SetContext = Context & { options: { resolver?: string } }
 
@@ -46,16 +52,11 @@ async function resolveTargetResolver(c: SetContext, name: string): Promise<`0x${
   return resolver
 }
 
-function encodeSetAddr(node: `0x${string}`, address: string, coinType?: number): `0x${string}` {
-  return encodeRecordOperation(node, { type: 'address', address, coinType })
-}
-
-function encodeSetText(node: `0x${string}`, key: string, value: string): `0x${string}` {
-  return encodeRecordOperation(node, { type: 'text', key, value })
-}
-
-function encodeSetContenthash(node: `0x${string}`, hash: string): `0x${string}` {
-  return encodeRecordOperation(node, { type: 'contenthash', hash })
+async function recordEncoder(c: SetContext, name: string, resolver: `0x${string}`) {
+  const { client } = clientFromContext(c)
+  const v2 = await supportsV2RecordSetters(client, resolver)
+  return (operation: RecordOperation) =>
+    v2 ? encodeV2RecordOperation(name, operation) : encodeRecordOperation(namehash(name), operation)
 }
 
 async function resolveReverseRegistrar(c: Context): Promise<`0x${string}`> {
@@ -147,9 +148,9 @@ export const setCommands = Cli.create('set', {
     async run(c) {
       const name = validateName(c.args.name)
       const resolverAddress = await resolveTargetResolver(c, name)
-      const node = namehash(name)
       const coinType = resolveCoinType(c.options)
-      const data = encodeSetAddr(node, c.options.address, coinType)
+      const encode = await recordEncoder(c, name, resolverAddress)
+      const data = encode({ type: 'address', address: c.options.address, coinType })
       return { to: resolverAddress, data, value: '0' }
     },
   })
@@ -176,8 +177,8 @@ export const setCommands = Cli.create('set', {
     async run(c) {
       const name = validateName(c.args.name)
       const resolverAddress = await resolveTargetResolver(c, name)
-      const node = namehash(name)
-      const data = encodeSetText(node, c.options.key, c.options.value)
+      const encode = await recordEncoder(c, name, resolverAddress)
+      const data = encode({ type: 'text', key: c.options.key, value: c.options.value })
       return { to: resolverAddress, data, value: '0' }
     },
   })
@@ -205,8 +206,8 @@ export const setCommands = Cli.create('set', {
     async run(c) {
       const name = validateName(c.args.name)
       const resolverAddress = await resolveTargetResolver(c, name)
-      const node = namehash(name)
-      const data = encodeSetContenthash(node, c.options.hash)
+      const encode = await recordEncoder(c, name, resolverAddress)
+      const data = encode({ type: 'contenthash', hash: c.options.hash })
       return { to: resolverAddress, data, value: '0' }
     },
   })
@@ -234,9 +235,9 @@ export const setCommands = Cli.create('set', {
     async run(c) {
       const name = validateName(c.args.name)
       const resolverAddress = await resolveTargetResolver(c, name)
-      const node = namehash(name)
       const operations = parseRecordOperations(c.options.data)
-      const calls = operations.map((operation) => encodeRecordOperation(node, operation))
+      const encode = await recordEncoder(c, name, resolverAddress)
+      const calls = operations.map(encode)
 
       const data = encodeFunctionData({
         abi: publicResolverAbi,

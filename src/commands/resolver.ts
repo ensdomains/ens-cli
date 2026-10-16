@@ -14,8 +14,8 @@ import {
   globalOptions,
   globalEnv,
   clientFromContext,
+  activeV2Deployment,
   activeV2Name,
-  v2DeploymentForChain,
 } from '../lib/context.ts'
 import { validateName, eth2ldLabel } from '../lib/utils.ts'
 import {
@@ -24,7 +24,7 @@ import {
   computeOwnedResolverAddress,
   defaultOwnedResolverSalt,
 } from '../lib/v2.ts'
-import { encodeRecordOperation, parseRecordOperations } from '../lib/records.ts'
+import { encodeV2RecordOperation, parseRecordOperations } from '../lib/records.ts'
 
 // ENSv2's EnhancedAccessControl packs each role into a 4-bit group, so a 1 in
 // every nibble grants the admin all roles (ALL_ROLES in the ENSv2 contracts).
@@ -89,9 +89,9 @@ export const resolverCommands = Cli.create('resolver', {
     ],
     async run(c) {
       const { client, chain } = clientFromContext(c)
-      const v2Deployment = v2DeploymentForChain(chain)
+      const v2Deployment = await activeV2Deployment(c)
       if (!v2Deployment) {
-        throw new Error(`ENSv2 resolver deployment is not configured for chain "${chain}"`)
+        throw new Error(`ENSv2 is not active on chain "${chain}"`)
       }
 
       const deployer = getAddress(c.args.deployer)
@@ -109,23 +109,23 @@ export const resolverCommands = Cli.create('resolver', {
       }
       const recordNode = recordName == null ? undefined : namehash(recordName)
       const setters =
-        recordNode == null
+        recordName == null
           ? []
-          : recordOperations.map((operation) => encodeRecordOperation(recordNode, operation))
+          : recordOperations.map((operation) => encodeV2RecordOperation(recordName, operation))
 
       const initializeData = encodeFunctionData({
         abi: permissionedResolverAbi,
         functionName: 'initialize',
-        args: [admin, roleBitmap, setters],
+        args: [[{ account: admin, roleBitmap }], setters],
       })
       const data = encodeFunctionData({
         abi: verifiableFactoryAbi,
         functionName: 'deployProxy',
         args: [v2Deployment.resolverImplementation, salt, initializeData],
       })
-      const proxy = computeOwnedResolverAddress({
+      const proxy = await computeOwnedResolverAddress({
+        client,
         factory: v2Deployment.resolverFactory,
-        proxyLogic: v2Deployment.resolverProxyLogic,
         deployer,
         owner: admin,
         salt,
@@ -148,7 +148,7 @@ export const resolverCommands = Cli.create('resolver', {
         chain,
         factory: v2Deployment.resolverFactory,
         implementation: v2Deployment.resolverImplementation,
-        proxyLogic: v2Deployment.resolverProxyLogic,
+        proxyLogic: proxy.proxyLogic,
         deployer,
         admin,
         salt: salt.toString(),

@@ -134,7 +134,11 @@ ens resolver deploy 0xYourAddress \
 
 The resolver address is derived from `(factory, proxyLogic, deployer, salt)`, so the deploy transaction must be sent from `deployer`. The salt defaults to `keccak256(abi.encode(keccak256("OwnedResolver"), owner, 0))` where `owner` is the admin the resolver is initialized with — the canonical scheme shared with the contracts-v2 setup script and the manager app's migration flow, so the resolver can be rediscovered from the owner address alone.
 
-`--name` and `--records` must be used together. On a new resolver, the address, text, and contenthash operations use `PermissionedResolver.initialize(..., setters)` to initialize records in the deployment transaction, avoiding a later `ens set batch` transaction. If the resolver is already deployed, use `ens set batch` instead. The predicted resolver address can be used in a registration commitment before deployment, so deployment and record initialization can happen during the commitment waiting period.
+`--name` and `--records` must be used together. On a new resolver, the address, text, and contenthash operations use `PermissionedResolver.initialize(grants, calls)` to initialize records in the deployment transaction, avoiding a later `ens set batch` transaction. If the resolver is already deployed, use `ens set batch` instead. The predicted resolver address can be used in a registration commitment before deployment, so deployment and record initialization can happen during the commitment waiting period.
+
+Sepolia targets the [October 1, 2026 contracts-v2 deployment](https://github.com/ensdomains/contracts-v2/tree/07e55a05/contracts/deployments/sepolia). Mainnet ENSv2 addresses are configured from the [October 2, 2026 deployment](https://github.com/ensdomains/contracts-v2/tree/deploy/mainnet-v2-20261002/contracts/deployments/mainnet), but, as on Sepolia, the CLI only uses them once the Universal Resolver reports ENSv2. `PermissionedResolver` setters take DNS-encoded names (`setAddress`, `setText`, `setContenthash`); `PublicResolverV2` retains the v1 namehash-based setters despite using v2 ownership. The `set` commands detect the target resolver's interface, including when `--resolver` is supplied. Subregistry and resolver initializers grant roles through arrays of `(account, roleBitmap)` entries.
+
+The CLI discovers the `.eth` registry through the selected Universal Resolver's `ROOT_REGISTRY()` and `getSubregistry("eth")`, and checks it against the configured registrar's `ETH_REGISTRY()`. Resolver address prediction reads `proxyLogic()` from the factory. Registrar, renewer, factory, migration controller, implementation, and default payment token addresses remain deployment configuration.
 
 Other options: `--admin` (defaults to deployer), `--salt` (decimal or 0x hex), `--role-bitmap` (decimal or 0x hex, default `0x1111…1111`).
 
@@ -156,11 +160,17 @@ ens subregistry set parent.eth --registry 0xSubregistry --chain sepolia
 
 ```sh
 # Check cost first
-ens price myname.eth
+ens price myname.eth --renew
 
 # Generate renewal calldata
 ens renew myname.eth --value 2307947853431408 --json
+
+# ENSv2 uses ERC-20 payments. Approve the returned registrar to spend total.
+ens price myname.eth --renew --chain sepolia
+ens renew myname.eth --chain sepolia --json
 ```
+
+On an active ENSv2 deployment, renewal targets `ETHRegistrar` for v2 names and `ETHRenewerV1` for reserved, unmigrated v1 names, including expired reservations in grace. Both use `renew((label, duration, referrer), paymentToken)`. Use the same `--payment-token` and `--duration` for pricing and renewal. ENSv2 renewal sends zero ETH; a nonzero `--value` is rejected. On ENSv1, `--value` remains required and should be the freshly fetched `bufferedTotal`. Renewal quotes exclude the registration premium.
 
 ### Migrating from ENSv1 to ENSv2
 

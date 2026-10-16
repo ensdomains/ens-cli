@@ -188,7 +188,6 @@ export const migrateCommand = Cli.create('migrate', {
         ? await resolveDeployedOwnedResolver({
             client,
             factory: v2Deployment.resolverFactory,
-            proxyLogic: v2Deployment.resolverProxyLogic,
             owner,
           })
         : zeroAddress
