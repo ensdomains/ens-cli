@@ -17,7 +17,7 @@ Built with [Incur](https://github.com/wevm/incur) for agent-native features (MCP
 ## Install preview build
 
 ```sh
-alias ens='npx "https://pkg.pr.new/ensdomains/cli/@ensdomains/cli@main"'
+alias ens='npx "https://pkg.pr.new/ensdomains/ens-cli/@ensdomains/cli@main"'
 ens
 ```
 
