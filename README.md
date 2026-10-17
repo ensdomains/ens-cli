@@ -21,8 +21,6 @@ npm install -g "https://pkg.pr.new/ensdomains/ens-cli/@ensdomains/cli@main"
 ens
 ```
 
-If you previously used an `ens` alias, remove it from your shell configuration (`~/.zshrc` or `~/.bashrc`) and run `unalias ens` in the current shell.
-
 The `@main` tag tracks the latest main build. To update, rerun the installation with `--prefer-online` to check cache freshness:
 
 ```sh
