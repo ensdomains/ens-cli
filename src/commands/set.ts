@@ -1,10 +1,11 @@
 import { Cli, z } from 'incur'
 import { zeroAddress } from 'viem'
-import { encodeFunctionData, getAddress } from 'viem/utils'
-import { getEnsResolver, namehash } from 'viem/ens'
+import { encodeFunctionData, getAddress, toHex } from 'viem/utils'
+import { getEnsResolver, namehash, packetToBytes } from 'viem/ens'
 import { validateName } from '../lib/utils.ts'
 import {
   addresses,
+  compositeResolverAbi,
   ensRegistryAbi,
   publicResolverAbi,
   reverseRegistrarAbi,
@@ -41,6 +42,22 @@ async function resolveTargetResolver(c: SetContext, name: string): Promise<`0x${
     resolver = await getEnsResolver(client, { name, ...universalResolverParam(c) })
   } catch {
     // Universal Resolver lookup failed — fall through to the no-resolver error
+  }
+
+  // For names not in ENSv2, an ENSv2 Universal Resolver returns its read-only
+  // ENSV1Resolver bridge. Writes must target the v1 resolver it mirrors.
+  if (resolver && resolver !== zeroAddress) {
+    try {
+      const [underlying] = await client.readContract({
+        address: resolver,
+        abi: compositeResolverAbi,
+        functionName: 'getResolver',
+        args: [toHex(packetToBytes(name))],
+      })
+      if (underlying !== zeroAddress) resolver = underlying
+    } catch {
+      // Not a composite resolver — write to it directly
+    }
   }
 
   if (!resolver || resolver === zeroAddress) {

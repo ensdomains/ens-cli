@@ -222,6 +222,11 @@ export const baseRegistrarAbi = parseAbi([
   'function safeTransferFrom(address from, address to, uint256 tokenId, bytes data) external',
 ])
 
+/** ICompositeResolver: implemented by ENSv2's ENSV1Resolver bridge to expose the mirrored resolver. */
+export const compositeResolverAbi = parseAbi([
+  'function getResolver(bytes name) view returns (address resolver, bool offchain)',
+])
+
 export const ensRegistryAbi = parseAbi([
   'function owner(bytes32 node) external view returns (address)',
   'function resolver(bytes32 node) external view returns (address)',
@@ -288,16 +293,16 @@ export const addresses = {
     resolver: '0xF29100983E058B709F3D539b0c765937B804AC15',
     universalResolver: '0xeEeEEEeE14D718C2B47D9923Deab1335E144EeEe',
     nameWrapper: '0xD4416b13d2b3a9aBae7AcD5D6C2BbDBE25686401',
-    // 2026-10-02 deployment (contracts-v2 deploy/mainnet-v2-20261002). Only used
+    // 2026-10-18 deployment (first deployed 2026-10-02). Only used
     // once the Universal Resolver reports ENSv2, so this is inert until cutover.
     v2: {
       registrar: '0xD6D8369e55c94Ae8AFA714E6cF7AB5bE54D5CC81',
       renewerV1: '0x56c447F308F463A01121C41E72b0E7e7557fCb68',
       paymentToken: '0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48', // USDC
-      resolverFactory: '0x77510ba162dfeA3d8989e3f0928a691B345730D2',
+      resolverFactory: '0x77510ba162dfeA3d8989E3f0928a691B345730D2',
       resolverImplementation: '0x565b0F456a04Ac9b48758190e90030623Cff57C5',
       subregistryImplementation: '0x75FF9AdBcFcE2469B097AC68f6Ae650EaE1351Bb',
-      lockedMigrationController: '0xa19d4d49230200b3e81290A87dd12ea916aF7BE6',
+      lockedMigrationController: '0xc46Bf3B6C7eBcFFd4EcfC3b012a1726a2463694d',
       unlockedMigrationController: '0xaB821Ca676CF2e0790Fa273526a165CFa86aEB64',
     },
   },

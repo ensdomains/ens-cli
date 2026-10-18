@@ -136,7 +136,7 @@ The resolver address is derived from `(factory, proxyLogic, deployer, salt)`, so
 
 `--name` and `--records` must be used together. On a new resolver, the address, text, and contenthash operations use `PermissionedResolver.initialize(grants, calls)` to initialize records in the deployment transaction, avoiding a later `ens set batch` transaction. If the resolver is already deployed, use `ens set batch` instead. The predicted resolver address can be used in a registration commitment before deployment, so deployment and record initialization can happen during the commitment waiting period.
 
-Sepolia targets the [October 1, 2026 contracts-v2 deployment](https://github.com/ensdomains/contracts-v2/tree/07e55a05/contracts/deployments/sepolia). Mainnet ENSv2 addresses are configured from the [October 2, 2026 deployment](https://github.com/ensdomains/contracts-v2/tree/deploy/mainnet-v2-20261002/contracts/deployments/mainnet), but, as on Sepolia, the CLI only uses them once the Universal Resolver reports ENSv2. `PermissionedResolver` setters take DNS-encoded names (`setAddress`, `setText`, `setContenthash`); `PublicResolverV2` retains the v1 namehash-based setters despite using v2 ownership. The `set` commands detect the target resolver's interface, including when `--resolver` is supplied. Subregistry and resolver initializers grant roles through arrays of `(account, roleBitmap)` entries.
+Sepolia targets the [October 1, 2026 contracts-v2 deployment](https://github.com/ensdomains/contracts-v2/tree/07e55a05/contracts/deployments/sepolia). Mainnet ENSv2 addresses are configured from the [October 18, 2026 deployment](https://github.com/ensdomains/contracts-v2/tree/deploy/mainnet-v2-20261002/contracts/deployments/mainnet), but, as on Sepolia, the CLI only uses them once the Universal Resolver reports ENSv2. `PermissionedResolver` setters take DNS-encoded names (`setAddress`, `setText`, `setContenthash`); `PublicResolverV2` retains the v1 namehash-based setters despite using v2 ownership. The `set` commands detect the target resolver's interface, including when `--resolver` is supplied. Subregistry and resolver initializers grant roles through arrays of `(account, roleBitmap)` entries.
 
 The CLI discovers the `.eth` registry through the selected Universal Resolver's `ROOT_REGISTRY()` and `getSubregistry("eth")`, and checks it against the configured registrar's `ETH_REGISTRY()`. Resolver address prediction reads `proxyLogic()` from the factory. Registrar, renewer, factory, migration controller, implementation, and default payment token addresses remain deployment configuration.
 
@@ -307,6 +307,13 @@ bun src/index.ts get address vitalik.eth --rpc http://localhost:8545
 ETH_RPC_URL=http://localhost:8545 bun src/index.ts available myname.eth
 ```
 
+### End-to-end tests
+
+`bun run test` runs the CLI against local [anvil](https://getfoundry.sh) forks of Sepolia and mainnet. Each test generates calldata with the real CLI, sends it from an impersonated account, and checks the resulting onchain state. Foundry must be installed. The forks use public RPCs by default; set `SEPOLIA_RPC_URL` or `MAINNET_RPC_URL` to use your own.
+
+- `e2e/sepolia.test.ts` covers ENSv2 registration, records, primary names, renewals, subregistries, and subnames, plus ENSv1 names reserved in ENSv2: renewal through `ETHRenewerV1`, v1 resolver and subname routing, and all three migration paths.
+- `e2e/mainnet.test.ts` covers ENSv1 before the cutover and simulates the mainnet ENSv2 cutover with `--universal-resolver`.
+
 ### Command design conventions
 
 - **One positional argument per command: the subject it operates on** (an ENS name or an address). Everything else is a named option, whether required or optional. Example: `ens set text myname.eth --key url --value https://example.com` — never `ens set text myname.eth url https://example.com`. Multiple positionals force the caller to memorize parameter order; named options are self-documenting in scripts, shell history, and agent transcripts.
@@ -319,4 +326,4 @@ ETH_RPC_URL=http://localhost:8545 bun src/index.ts available myname.eth
 1. Create a command file in `src/commands/` exporting a function that returns a command definition (for flat commands) or a `Cli.create()` group (for nested subcommands).
 2. Follow the command design conventions above.
 3. Mount it in `src/cli.ts` via `.command()`.
-4. Test against mainnet or a local fork: `bun src/index.ts <your-command>`.
+4. Add end-to-end coverage in `e2e/` and run `bun run test`.
