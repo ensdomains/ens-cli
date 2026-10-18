@@ -17,19 +17,22 @@ Built with [Incur](https://github.com/wevm/incur) for agent-native features (MCP
 ## Install preview build
 
 ```sh
-alias ens='npx "https://pkg.pr.new/ensdomains/cli/@ensdomains/cli@main"'
+npm install -g "https://pkg.pr.new/ensdomains/ens-cli/@ensdomains/cli@main"
 ens
 ```
 
-This creates a temporary `ens` alias for the current shell session. To make it permanent, add the line to your `~/.zshrc` or `~/.bashrc`. There are two ways to pick a build:
-
-- **Track the latest main build** (as above): the `@main` tag always points to the most recent build from the main branch. To pick up a newer build after main has moved, clear your npx cache.
-- **Pin a specific commit**: replace `main` in the URL with a commit hash (e.g. `@ensdomains/cli@COMMIT_HASH`). To update, change the hash in the alias.
-
-To remove stale cached versions, clear your npx cache:
+The `@main` tag tracks the latest main build. To update, rerun the installation with `--prefer-online` to check cache freshness:
 
 ```sh
-npx clear-npx-cache
+npm install -g --prefer-online "https://pkg.pr.new/ensdomains/ens-cli/@ensdomains/cli@main"
+```
+
+To pin a build, replace `main` in the URL with a commit hash (e.g. `@ensdomains/cli@COMMIT_HASH`).
+
+For an optional no-install alternative, run:
+
+```sh
+npx "https://pkg.pr.new/ensdomains/ens-cli/@ensdomains/cli@main"
 ```
 
 ## Commands
