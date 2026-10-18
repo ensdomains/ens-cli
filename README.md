@@ -248,6 +248,8 @@ ens set batch myname.eth --data '[
 2. `ETH_RPC_URL` environment variable
 3. Public fallback RPCs
 
+A custom RPC from `--rpc` or `ETH_RPC_URL` is used on its own; the CLI never falls back to public RPCs when one is set.
+
 **Chain selection:**
 
 ```sh
