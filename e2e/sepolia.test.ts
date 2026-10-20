@@ -5,6 +5,7 @@ import {
   erc20Abi,
   parseAbi,
   toHex,
+  zeroAddress,
   type Address,
 } from 'viem'
 import { labelhash, namehash, packetToBytes } from 'viem/ens'
@@ -41,6 +42,7 @@ const nameWrapperAbi = parseAbi([
 const ensRegistryAbi = parseAbi([
   'function owner(bytes32 node) view returns (address)',
   'function resolver(bytes32 node) view returns (address)',
+  'function setResolver(bytes32 node, address resolver)',
 ])
 const baseRegistrarAbi = parseAbi([
   'function nameExpires(uint256 id) view returns (uint256)',
@@ -235,6 +237,12 @@ describe('ENSv2 name lifecycle', () => {
     expect(await fork.ens('get', 'avatar', name)).toMatchObject({
       avatar: 'data:image/svg+xml;base64,PHN2Zy8+',
     })
+  })
+
+  test('set address with empty bytes clears the ETH record', async () => {
+    await fork.send(owner, await fork.ens('set', 'address', name, '--address', '0x'))
+    expect(await fork.ens('get', 'address', name)).toMatchObject({ address: null })
+    await fork.send(owner, await fork.ens('set', 'address', name, '--address', owner))
   })
 
   test('set name sets a primary name that reverse resolves, and clears it', async () => {
@@ -552,6 +560,34 @@ describe('ENSv1 names reserved in ENSv2', () => {
     expect(unwrappedTx.to).toBe(addresses.sepolia.registry)
     await fork.send(unwrapped.owner, unwrappedTx)
     expect(await registryResolver(unwrapped.name)).toBe(addresses.sepolia.resolver)
+  })
+
+  test('set rejects v1 names whose bridge finds no resolver', async () => {
+    // ENSV1Resolver walks up to ancestor resolvers, so clear the name's and .eth's.
+    const snapshot = await fork.client.snapshot()
+    try {
+      const ethOwner = await fork.client.readContract({
+        address: addresses.sepolia.registry,
+        abi: ensRegistryAbi,
+        functionName: 'owner',
+        args: [namehash('eth')],
+      })
+      await fork.fund(ethOwner)
+      for (const [from, node] of [
+        [unwrapped.owner, namehash(unwrapped.name)],
+        [ethOwner, namehash('eth')],
+      ] as const) {
+        await fork.write(from, addresses.sepolia.registry, ensRegistryAbi, 'setResolver', [
+          node,
+          zeroAddress,
+        ])
+      }
+      await expect(
+        fork.ens('set', 'text', unwrapped.name, '--key', 'k', '--value', 'v'),
+      ).rejects.toThrow('No resolver set')
+    } finally {
+      await fork.client.revert({ id: snapshot })
+    }
   })
 
   test('subname create routes wrapped parents to the NameWrapper and unwrapped parents to the registry', async () => {

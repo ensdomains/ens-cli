@@ -54,7 +54,8 @@ async function resolveTargetResolver(c: SetContext, name: string): Promise<`0x${
         functionName: 'getResolver',
         args: [toHex(packetToBytes(name))],
       })
-      if (underlying !== zeroAddress) resolver = underlying
+      // Zero means the v1 name has no resolver, so there is nothing writable.
+      resolver = underlying
     } catch {
       // Not a composite resolver — write to it directly
     }

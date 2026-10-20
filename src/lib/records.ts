@@ -96,8 +96,11 @@ export function encodeV2RecordOperation(name: string, operation: RecordOperation
   switch (operation.type) {
     case 'address': {
       const coinType = resolveCoinType(operation) ?? 60
+      // Empty bytes clear the record; otherwise ETH addresses are checksummed.
       const address =
-        coinType === 60 ? getAddress(operation.address) : asHex(operation.address, 'address')
+        coinType === 60 && operation.address !== '0x'
+          ? getAddress(operation.address)
+          : asHex(operation.address, 'address')
       return encodeFunctionData({
         abi: permissionedResolverAbi,
         functionName: 'setAddress',
