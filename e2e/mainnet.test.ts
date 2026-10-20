@@ -22,6 +22,7 @@ const nameWrapperAbi = parseAbi([
   'function wrapETH2LD(string label, address wrappedOwner, uint16 ownerControlledFuses, address resolver) returns (uint64)',
 ])
 const ensRegistryAbi = parseAbi(['function resolver(bytes32 node) view returns (address)'])
+const erc165Abi = parseAbi(['function supportsInterface(bytes4 interfaceId) view returns (bool)'])
 const v2RegistryAbi = parseAbi([
   'function grantRootRoles(uint256 roleBitmap, address account) returns (bool)',
 ])
@@ -36,6 +37,7 @@ beforeAll(async () => {
   fork = await startFork({
     chain: 'mainnet',
     forkUrl: process.env.MAINNET_RPC_URL ?? 'https://ethereum-rpc.publicnode.com',
+    forkBlock: process.env.MAINNET_FORK_BLOCK,
   })
 })
 
@@ -59,8 +61,8 @@ function registryResolver(name: string) {
   })
 }
 
-async function registerV1(owner: Address, name: string) {
-  const commit = await fork.ens('register', 'commit', name, '--owner', owner)
+async function registerV1(owner: Address, name: string, ...options: string[]) {
+  const commit = await fork.ens('register', 'commit', name, '--owner', owner, ...options)
   await fork.send(owner, commit)
   await fork.advance(70)
   const price = await fork.ens('price', name)
@@ -74,8 +76,10 @@ async function registerV1(owner: Address, name: string) {
     commit.secret,
     '--value',
     price.bufferedTotal,
+    ...options,
   )
   await fork.send(owner, reveal)
+  return commit
 }
 
 describe('ENSv1 on mainnet (ENSv2 not active)', () => {
@@ -84,6 +88,14 @@ describe('ENSv1 on mainnet (ENSv2 not active)', () => {
   const name = `${label}.eth`
 
   beforeAll(async () => {
+    // These tests describe mainnet before the cutover; fail loudly once that is no longer true.
+    const v2Live = await fork.client.readContract({
+      address: v1.universalResolver,
+      abi: erc165Abi,
+      functionName: 'supportsInterface',
+      args: ['0xfe0badd6'],
+    })
+    if (v2Live) throw new Error('ENSv2 is live on mainnet; update the ENSv1 suite in this file')
     owner = await fork.account()
   })
 
@@ -106,11 +118,14 @@ describe('ENSv1 on mainnet (ENSv2 not active)', () => {
   })
 
   test('register commit and reveal pay in ETH through the v1 controller', async () => {
-    const commit = await fork.ens('register', 'commit', name, '--owner', owner, '--reverse-record')
+    const commit = await registerV1(owner, name, '--reverse-record')
     expect(commit).toMatchObject({ to: v1.controller, resolver: v1.resolver, reverseRecord: true })
-    await registerV1(owner, name)
 
     expect(await fork.ens('whois', name)).toMatchObject({ owner, resolver: v1.resolver })
+    // The reverse record only verifies once the name also resolves forward to the owner.
+    expect(await fork.ens('get', 'name', owner)).toMatchObject({ name: null })
+    await fork.send(owner, await fork.ens('set', 'address', name, '--address', owner))
+    expect(await fork.ens('get', 'name', owner)).toMatchObject({ name })
     expect(await fork.ens('available', name)).toMatchObject({ available: false })
   })
 
@@ -146,6 +161,25 @@ describe('ENSv1 on mainnet (ENSv2 not active)', () => {
     })
     const optimism = await fork.ens('get', 'address', name, '--chain-id', '10')
     expect(optimism.address.toLowerCase()).toBe(owner.toLowerCase())
+  })
+
+  test('set encodes v1 setters for --resolver targets without ERC-165', async () => {
+    // An EOA returns no data and the v1 registry reverts on supportsInterface.
+    for (const resolver of [owner, v1.registry]) {
+      const tx = await fork.ens(
+        'set',
+        'text',
+        name,
+        '--key',
+        'k',
+        '--value',
+        'v',
+        '--resolver',
+        resolver,
+      )
+      expect(tx.to.toLowerCase()).toBe(resolver.toLowerCase())
+      expect(tx.data.slice(0, 10)).toBe('0x10f13a8c') // setText(bytes32,string,string)
+    }
   })
 
   test('set name sets and clears the primary name', async () => {

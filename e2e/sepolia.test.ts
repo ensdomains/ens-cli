@@ -60,6 +60,7 @@ beforeAll(async () => {
   fork = await startFork({
     chain: 'sepolia',
     forkUrl: process.env.SEPOLIA_RPC_URL ?? 'https://ethereum-sepolia-rpc.publicnode.com',
+    forkBlock: process.env.SEPOLIA_FORK_BLOCK,
   })
 })
 

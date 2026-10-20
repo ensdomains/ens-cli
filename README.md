@@ -311,7 +311,7 @@ ETH_RPC_URL=http://localhost:8545 bun src/index.ts available myname.eth
 
 ### End-to-end tests
 
-`bun run test` runs the CLI against local [anvil](https://getfoundry.sh) forks of Sepolia and mainnet. Each test generates calldata with the real CLI, sends it from an impersonated account, and checks the resulting onchain state. Foundry must be installed. The forks use public RPCs by default; set `SEPOLIA_RPC_URL` or `MAINNET_RPC_URL` to use your own.
+`bun run test` runs the CLI against local [anvil](https://getfoundry.sh) forks of Sepolia and mainnet. Each test generates calldata with the real CLI, sends it from an impersonated account, and checks the resulting onchain state. Foundry must be installed. The forks use public RPCs by default; set `SEPOLIA_RPC_URL` or `MAINNET_RPC_URL` to use your own. Public RPCs prune history, so forks start near the chain head; with an archive RPC, set `SEPOLIA_FORK_BLOCK` or `MAINNET_FORK_BLOCK` to pin a block.
 
 - `e2e/sepolia.test.ts` covers ENSv2 registration, records, primary names, renewals, subregistries, and subnames, plus ENSv1 names reserved in ENSv2: renewal through `ETHRenewerV1`, v1 resolver and subname routing, and all three migration paths.
 - `e2e/mainnet.test.ts` covers ENSv1 before the cutover and simulates the mainnet ENSv2 cutover with `--universal-resolver`.

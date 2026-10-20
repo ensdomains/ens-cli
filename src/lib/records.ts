@@ -1,5 +1,11 @@
 import { z } from 'incur'
-import type { PublicClient } from 'viem'
+import {
+  BaseError,
+  ContractFunctionRevertedError,
+  ContractFunctionZeroDataError,
+  AbiDecodingDataSizeTooSmallError,
+  type PublicClient,
+} from 'viem'
 import { encodeFunctionData, getAddress, toHex, toFunctionSelector } from 'viem/utils'
 import { packetToBytes } from 'viem/ens'
 import { permissionedResolverAbi, publicResolverAbi } from './contracts.ts'
@@ -10,13 +16,27 @@ import { asHex } from './utils.ts'
 // not the chain or name version: v1 and v2 resolver contracts coexist.
 const V2_ADDRESS_SETTER_INTERFACE = toFunctionSelector('setAddress(bytes,uint256,bytes)')
 
-export function supportsV2RecordSetters(client: PublicClient, resolver: `0x${string}`) {
-  return client.readContract({
-    address: resolver,
-    abi: permissionedResolverAbi,
-    functionName: 'supportsInterface',
-    args: [V2_ADDRESS_SETTER_INTERFACE],
-  })
+export async function supportsV2RecordSetters(client: PublicClient, resolver: `0x${string}`) {
+  try {
+    return await client.readContract({
+      address: resolver,
+      abi: permissionedResolverAbi,
+      functionName: 'supportsInterface',
+      args: [V2_ADDRESS_SETTER_INTERFACE],
+    })
+  } catch (error) {
+    // Legacy resolvers without ERC-165 revert or return nothing; RPC failures still throw.
+    const unsupported =
+      error instanceof BaseError &&
+      error.walk(
+        (e) =>
+          e instanceof ContractFunctionRevertedError ||
+          e instanceof ContractFunctionZeroDataError ||
+          e instanceof AbiDecodingDataSizeTooSmallError,
+      )
+    if (unsupported) return false
+    throw error
+  }
 }
 
 export const recordOperationSchema = z.discriminatedUnion('type', [

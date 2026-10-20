@@ -61,13 +61,15 @@ export const renewCommand = Cli.create('renew', {
         referrer,
         paymentToken,
         version: 'v2',
-        note: `Fetch "ens price ${label}.eth --renew --chain ${chain} --payment-token ${paymentToken}" and approve ${target.address} to spend total before sending.`,
+        note: `Fetch "ens price ${label}.eth --renew --duration ${duration} --chain ${chain} --payment-token ${paymentToken}" and approve ${target.address} to spend total before sending.`,
       }
     }
     if (c.options.paymentToken != null)
       throw new Error('--payment-token requires an active ENSv2 deployment')
     if (c.options.value == null)
-      throw new Error('ENSv1 renewal requires --value from "ens price <name> --renew"')
+      throw new Error(
+        `ENSv1 renewal requires --value from "ens price ${c.args.name} --renew --duration ${duration}"`,
+      )
 
     const data = encodeFunctionData({
       abi: ethRegistrarControllerAbi,
