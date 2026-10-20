@@ -26,17 +26,22 @@ export async function supportsV2RecordSetters(client: PublicClient, resolver: `0
     })
   } catch (error) {
     // Legacy resolvers without ERC-165 revert or return nothing; RPC failures still throw.
-    const unsupported =
-      error instanceof BaseError &&
-      error.walk(
-        (e) =>
-          e instanceof ContractFunctionRevertedError ||
-          e instanceof ContractFunctionZeroDataError ||
-          e instanceof AbiDecodingDataSizeTooSmallError,
-      )
-    if (unsupported) return false
+    if (isUnsupportedCall(error)) return false
     throw error
   }
+}
+
+/** True when a contract call failed because the target lacks the function, not because of the RPC. */
+export function isUnsupportedCall(error: unknown) {
+  return (
+    error instanceof BaseError &&
+    error.walk(
+      (e) =>
+        e instanceof ContractFunctionRevertedError ||
+        e instanceof ContractFunctionZeroDataError ||
+        e instanceof AbiDecodingDataSizeTooSmallError,
+    ) != null
+  )
 }
 
 export const recordOperationSchema = z.discriminatedUnion('type', [

@@ -22,7 +22,10 @@ const nameWrapperAbi = parseAbi([
   'function wrapETH2LD(string label, address wrappedOwner, uint16 ownerControlledFuses, address resolver) returns (uint64)',
 ])
 const ensRegistryAbi = parseAbi(['function resolver(bytes32 node) view returns (address)'])
-const erc165Abi = parseAbi(['function supportsInterface(bytes4 interfaceId) view returns (bool)'])
+const universalResolverAbi = parseAbi([
+  'function supportsInterface(bytes4 interfaceId) view returns (bool)',
+  'function isENSv2() view returns (bool)',
+])
 const v2RegistryAbi = parseAbi([
   'function grantRootRoles(uint256 roleBitmap, address account) returns (bool)',
 ])
@@ -89,12 +92,14 @@ describe('ENSv1 on mainnet (ENSv2 not active)', () => {
 
   beforeAll(async () => {
     // These tests describe mainnet before the cutover; fail loudly once that is no longer true.
-    const v2Live = await fork.client.readContract({
-      address: v1.universalResolver,
-      abi: erc165Abi,
-      functionName: 'supportsInterface',
-      args: ['0xfe0badd6'],
-    })
+    // Same check as the CLI: v1 Universal Resolvers can also advertise the interface.
+    const ur = { address: v1.universalResolver, abi: universalResolverAbi } as const
+    const v2Live =
+      (await fork.client.readContract({
+        ...ur,
+        functionName: 'supportsInterface',
+        args: ['0xfe0badd6'],
+      })) && (await fork.client.readContract({ ...ur, functionName: 'isENSv2' }))
     if (v2Live) throw new Error('ENSv2 is live on mainnet; update the ENSv1 suite in this file')
     owner = await fork.account()
   })

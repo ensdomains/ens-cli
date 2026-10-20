@@ -22,6 +22,7 @@ import {
   encodeRecordOperation,
   encodeV2RecordOperation,
   supportsV2RecordSetters,
+  isUnsupportedCall,
   parseRecordOperations,
   type RecordOperation,
 } from '../lib/records.ts'
@@ -40,8 +41,9 @@ async function resolveTargetResolver(c: SetContext, name: string): Promise<`0x${
   let resolver: `0x${string}` | null = null
   try {
     resolver = await getEnsResolver(client, { name, ...universalResolverParam(c) })
-  } catch {
-    // Universal Resolver lookup failed — fall through to the no-resolver error
+  } catch (error) {
+    // The Universal Resolver reverts when no resolver is found; RPC failures still throw.
+    if (!isUnsupportedCall(error)) throw error
   }
 
   // For names not in ENSv2, an ENSv2 Universal Resolver returns its read-only
@@ -56,8 +58,10 @@ async function resolveTargetResolver(c: SetContext, name: string): Promise<`0x${
       })
       // Zero means the v1 name has no resolver, so there is nothing writable.
       resolver = underlying
-    } catch {
-      // Not a composite resolver — write to it directly
+    } catch (error) {
+      // Not a composite resolver — write to it directly. RPC failures must not
+      // fall through, or the calldata could target the read-only bridge.
+      if (!isUnsupportedCall(error)) throw error
     }
   }
 
