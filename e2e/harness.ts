@@ -16,27 +16,20 @@ const root = new URL('..', import.meta.url).pathname
 export type Fork = Awaited<ReturnType<typeof startFork>>
 
 /** Starts an anvil fork that impersonates every sender, so tests can act as any name owner. */
-export async function startFork(opts: {
-  chain: 'mainnet' | 'sepolia'
-  forkUrl: string
-  forkBlock?: string
-}) {
+export async function startFork(opts: { chain: 'mainnet' | 'sepolia'; forkUrl: string }) {
   const port = 20_000 + Math.floor(Math.random() * 20_000)
   const rpc = `http://127.0.0.1:${port}`
-  // Public RPCs prune history, so forks default to near the head. Load-balanced nodes can lag
-  // it; fork a few blocks back so every node has it. Pin a block with an archive RPC instead.
-  const forkBlock = opts.forkBlock
-    ? BigInt(opts.forkBlock)
-    : (await createTestClient({ mode: 'anvil', transport: http(opts.forkUrl) })
-        .extend(publicActions)
-        .getBlockNumber()) - 10n
+  // Load-balanced public RPCs can lag the head; fork a few blocks back so every node has it.
+  const head = await createTestClient({ mode: 'anvil', transport: http(opts.forkUrl) })
+    .extend(publicActions)
+    .getBlockNumber()
   const anvil: Subprocess = Bun.spawn(
     [
       'anvil',
       '--fork-url',
       opts.forkUrl,
       '--fork-block-number',
-      String(forkBlock),
+      String(head - 10n),
       '--port',
       String(port),
       '--auto-impersonate',

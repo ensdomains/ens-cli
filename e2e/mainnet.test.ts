@@ -40,7 +40,6 @@ beforeAll(async () => {
   fork = await startFork({
     chain: 'mainnet',
     forkUrl: process.env.MAINNET_RPC_URL ?? 'https://ethereum-rpc.publicnode.com',
-    forkBlock: process.env.MAINNET_FORK_BLOCK,
   })
 })
 
