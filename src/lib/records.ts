@@ -6,7 +6,7 @@ import {
   AbiDecodingDataSizeTooSmallError,
   type PublicClient,
 } from 'viem'
-import { encodeFunctionData, getAddress, toHex, toFunctionSelector } from 'viem/utils'
+import { encodeFunctionData, getAddress, isHex, toHex, toFunctionSelector } from 'viem/utils'
 import { packetToBytes } from 'viem/ens'
 import { permissionedResolverAbi, publicResolverAbi } from './contracts.ts'
 import { resolveCoinType } from './cointype.ts'
@@ -43,9 +43,12 @@ export function isUnsupportedCall(error: unknown) {
     return true
   if (!error.walk((e) => e instanceof ContractFunctionRevertedError)) return false
   // viem also reports JSON-RPC internal errors (-32603) as reverts, so require
-  // evidence from the node: the revert code, revert data, or a revert message.
-  const rpc = error.walk() as BaseError & { code?: number; data?: unknown }
-  return rpc.code === 3 || rpc.data != null || /revert/i.test(`${rpc.details} ${rpc.shortMessage}`)
+  // evidence from the node's raw error: the revert code, hex revert data, or a
+  // revert message.
+  const rpc = error.walk() as { code?: unknown; message?: unknown; data?: unknown }
+  const data =
+    rpc.data && typeof rpc.data === 'object' ? (rpc.data as { data?: unknown }).data : rpc.data
+  return rpc.code === 3 || isHex(data) || /revert/i.test(String(rpc.message))
 }
 
 export const recordOperationSchema = z.discriminatedUnion('type', [

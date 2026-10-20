@@ -596,16 +596,31 @@ describe('ENSv1 names reserved in ENSv2', () => {
     // Probes whose failure would otherwise target the bridge or pick the wrong setters.
     const getResolver = toFunctionSelector('getResolver(bytes)')
     const v2Setters = `0x01ffc9a7${toFunctionSelector('setAddress(bytes,uint256,bytes)').slice(2)}`
-    for (const probe of [getResolver, v2Setters]) {
-      const proxy = fork.faultyRpc((body) => body.includes(`"data":"${probe}`))
+    const via = async (probe: string, error: object | undefined, run: (url: string) => unknown) => {
+      const proxy = fork.faultyRpc((body) => body.includes(`"data":"${probe}`), error)
       try {
-        await expect(fork.ensVia(proxy.url, ...setText)).rejects.toThrow(
-          'upstream temporarily unavailable',
-        )
+        await run(proxy.url)
       } finally {
         proxy.stop()
       }
     }
+
+    const message = 'Internal error: upstream temporarily unavailable'
+    for (const probe of [getResolver, v2Setters]) {
+      for (const error of [
+        { code: -32603, message },
+        { code: -32603, message, data: { requestId: 'rpc-123' } },
+      ]) {
+        await via(probe, error, (url) =>
+          expect(fork.ensVia(url, ...setText)).rejects.toThrow('upstream temporarily unavailable'),
+        )
+      }
+    }
+
+    // Nodes that report a genuine revert as -32603 still fall back to the v1 setters.
+    await via(v2Setters, { code: -32603, message: 'execution reverted' }, async (url) => {
+      expect((await fork.ensVia(url, ...setText)).data.slice(0, 10)).toBe('0x10f13a8c')
+    })
     expect((await fork.ens(...setText)).to).toBe(await registryResolver(wrapped.name))
   })
 

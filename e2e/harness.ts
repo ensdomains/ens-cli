@@ -125,18 +125,19 @@ export async function startFork(opts: {
     return receipt
   }
 
-  /** Proxies the fork, answering requests that match `fail` with a JSON-RPC internal error. */
-  function faultyRpc(fail: (body: string) => boolean) {
+  const upstreamUnavailable = {
+    code: -32603,
+    message: 'Internal error: upstream temporarily unavailable',
+  }
+
+  /** Proxies the fork, answering requests that match `fail` with a JSON-RPC error. */
+  function faultyRpc(fail: (body: string) => boolean, error: object = upstreamUnavailable) {
     const server = Bun.serve({
       port: 0,
       async fetch(req) {
         const body = await req.text()
         if (fail(body)) {
           const { id } = JSON.parse(body)
-          const error = {
-            code: -32603,
-            message: 'Internal error: upstream temporarily unavailable',
-          }
           return Response.json({ jsonrpc: '2.0', id, error })
         }
         return fetch(rpc, { method: 'POST', body, headers: { 'content-type': 'application/json' } })
