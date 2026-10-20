@@ -33,15 +33,19 @@ export async function supportsV2RecordSetters(client: PublicClient, resolver: `0
 
 /** True when a contract call failed because the target lacks the function, not because of the RPC. */
 export function isUnsupportedCall(error: unknown) {
-  return (
-    error instanceof BaseError &&
+  if (!(error instanceof BaseError)) return false
+  if (
     error.walk(
       (e) =>
-        e instanceof ContractFunctionRevertedError ||
-        e instanceof ContractFunctionZeroDataError ||
-        e instanceof AbiDecodingDataSizeTooSmallError,
-    ) != null
+        e instanceof ContractFunctionZeroDataError || e instanceof AbiDecodingDataSizeTooSmallError,
+    )
   )
+    return true
+  if (!error.walk((e) => e instanceof ContractFunctionRevertedError)) return false
+  // viem also reports JSON-RPC internal errors (-32603) as reverts, so require
+  // evidence from the node: the revert code, revert data, or a revert message.
+  const rpc = error.walk() as BaseError & { code?: number; data?: unknown }
+  return rpc.code === 3 || rpc.data != null || /revert/i.test(`${rpc.details} ${rpc.shortMessage}`)
 }
 
 export const recordOperationSchema = z.discriminatedUnion('type', [

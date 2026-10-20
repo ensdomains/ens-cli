@@ -63,9 +63,13 @@ export async function startFork(opts: {
   }
 
   /** Runs the CLI and returns its JSON output, throwing the CLI's error message on failure. */
-  async function ens<T = any>(...args: string[]): Promise<T> {
+  function ens<T = any>(...args: string[]): Promise<T> {
+    return ensVia<T>(rpc, ...args)
+  }
+
+  async function ensVia<T = any>(rpcUrl: string, ...args: string[]): Promise<T> {
     const proc = Bun.spawn(
-      ['bun', 'src/index.ts', ...args, '--chain', opts.chain, '--rpc', rpc, '--format', 'json'],
+      ['bun', 'src/index.ts', ...args, '--chain', opts.chain, '--rpc', rpcUrl, '--format', 'json'],
       { cwd: root, stdout: 'pipe', stderr: 'pipe' },
     )
     const [stdout, stderr, exitCode] = await Promise.all([
@@ -121,6 +125,26 @@ export async function startFork(opts: {
     return receipt
   }
 
+  /** Proxies the fork, answering requests that match `fail` with a JSON-RPC internal error. */
+  function faultyRpc(fail: (body: string) => boolean) {
+    const server = Bun.serve({
+      port: 0,
+      async fetch(req) {
+        const body = await req.text()
+        if (fail(body)) {
+          const { id } = JSON.parse(body)
+          const error = {
+            code: -32603,
+            message: 'Internal error: upstream temporarily unavailable',
+          }
+          return Response.json({ jsonrpc: '2.0', id, error })
+        }
+        return fetch(rpc, { method: 'POST', body, headers: { 'content-type': 'application/json' } })
+      },
+    })
+    return { url: `http://127.0.0.1:${server.port}`, stop: () => server.stop(true) }
+  }
+
   /** A fresh funded address, so runs never collide with existing state on the forked chain. */
   async function account() {
     const address = privateKeyToAddress(generatePrivateKey())
@@ -145,6 +169,8 @@ export async function startFork(opts: {
     rpc,
     client,
     ens,
+    ensVia,
+    faultyRpc,
     send,
     write,
     account,

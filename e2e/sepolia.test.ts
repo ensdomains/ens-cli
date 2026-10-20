@@ -4,6 +4,7 @@ import {
   encodeFunctionData,
   erc20Abi,
   parseAbi,
+  toFunctionSelector,
   toHex,
   zeroAddress,
   type Address,
@@ -588,6 +589,24 @@ describe('ENSv1 names reserved in ENSv2', () => {
     } finally {
       await fork.client.revert({ id: snapshot })
     }
+  })
+
+  test('set aborts on RPC errors instead of guessing the resolver', async () => {
+    const setText = ['set', 'text', wrapped.name, '--key', 'k', '--value', 'v']
+    // Probes whose failure would otherwise target the bridge or pick the wrong setters.
+    const getResolver = toFunctionSelector('getResolver(bytes)')
+    const v2Setters = `0x01ffc9a7${toFunctionSelector('setAddress(bytes,uint256,bytes)').slice(2)}`
+    for (const probe of [getResolver, v2Setters]) {
+      const proxy = fork.faultyRpc((body) => body.includes(`"data":"${probe}`))
+      try {
+        await expect(fork.ensVia(proxy.url, ...setText)).rejects.toThrow(
+          'upstream temporarily unavailable',
+        )
+      } finally {
+        proxy.stop()
+      }
+    }
+    expect((await fork.ens(...setText)).to).toBe(await registryResolver(wrapped.name))
   })
 
   test('subname create routes wrapped parents to the NameWrapper and unwrapped parents to the registry', async () => {
