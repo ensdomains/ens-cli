@@ -10,10 +10,10 @@ const defaultRpcs = {
 const chains = { mainnet, sepolia } as const
 
 export function createEnsClient({ rpc, chain = 'mainnet' }: { rpc?: string; chain?: Chain }) {
-  const transports = [...(rpc ? [http(rpc)] : []), ...defaultRpcs[chain].map((url) => http(url))]
-
+  // A user-supplied RPC is used exclusively: falling back to public RPCs could
+  // silently build transactions from a different chain state (e.g. a local fork).
   return createPublicClient({
     chain: chains[chain],
-    transport: fallback(transports),
+    transport: rpc ? http(rpc) : fallback(defaultRpcs[chain].map((url) => http(url))),
   })
 }

@@ -12,7 +12,7 @@ import {
   toHex,
 } from 'viem/utils'
 import { labelhash, namehash } from 'viem/ens'
-import { v2RegistryAbi } from './contracts.ts'
+import { v2RegistryAbi, verifiableFactoryAbi } from './contracts.ts'
 
 // Mirrors IPermissionedRegistry.Status in contracts-v2.
 export enum V2Status {
@@ -33,6 +33,8 @@ export const ROLE_UNREGISTER_ADMIN = ROLE_UNREGISTER << 128n
 export const ROLE_RENEW_ADMIN = ROLE_RENEW << 128n
 export const ROLE_SET_SUBREGISTRY_ADMIN = ROLE_SET_SUBREGISTRY << 128n
 export const ROLE_SET_RESOLVER_ADMIN = ROLE_SET_RESOLVER << 128n
+// Admin-only: PermissionedRegistry rejects transfers from owners without it.
+export const ROLE_CAN_TRANSFER_ADMIN = (1n << 28n) << 128n
 export const V2_DEFAULT_OWNER_ROLE_BITMAP =
   ROLE_UNREGISTER |
   ROLE_RENEW |
@@ -41,7 +43,8 @@ export const V2_DEFAULT_OWNER_ROLE_BITMAP =
   ROLE_UNREGISTER_ADMIN |
   ROLE_RENEW_ADMIN |
   ROLE_SET_SUBREGISTRY_ADMIN |
-  ROLE_SET_RESOLVER_ADMIN
+  ROLE_SET_RESOLVER_ADMIN |
+  ROLE_CAN_TRANSFER_ADMIN
 // ENSv2 EAC packs legal roles into the low bit of each 4-bit nybble; this is
 // the all-roles grant bitmap, not a locked-roles or fuse-style mask.
 export const ALL_ROLES = BigInt(
@@ -84,20 +87,25 @@ export function defaultOwnedResolverSalt(owner: `0x${string}`) {
   )
 }
 
-export function computeOwnedResolverAddress(opts: {
+export async function computeOwnedResolverAddress(opts: {
+  client: PublicClient
   factory: `0x${string}`
-  proxyLogic: `0x${string}`
   deployer: `0x${string}`
   owner: `0x${string}`
   salt?: bigint
 }) {
+  const proxyLogic = await opts.client.readContract({
+    address: opts.factory,
+    abi: verifiableFactoryAbi,
+    functionName: 'proxyLogic',
+  })
   const salt = opts.salt ?? defaultOwnedResolverSalt(opts.owner)
   const outerSalt = keccak256(
     encodeAbiParameters([{ type: 'address' }, { type: 'uint256' }], [opts.deployer, salt]),
   )
   const bytecode = concat([
     '0x3d604d80600a3d3981f3363d3d373d3d3d363d73',
-    opts.proxyLogic,
+    proxyLogic,
     '0x5af43d82803e903d91602b57fd5bf3',
     outerSalt,
   ])
@@ -111,18 +119,18 @@ export function computeOwnedResolverAddress(opts: {
     }),
     salt,
     outerSalt,
+    proxyLogic,
   }
 }
 
 export async function resolveDeployedOwnedResolver(opts: {
   client: PublicClient
   factory: `0x${string}`
-  proxyLogic: `0x${string}`
   owner: `0x${string}`
 }) {
-  const proxy = computeOwnedResolverAddress({
+  const proxy = await computeOwnedResolverAddress({
+    client: opts.client,
     factory: opts.factory,
-    proxyLogic: opts.proxyLogic,
     deployer: opts.owner,
     owner: opts.owner,
   })

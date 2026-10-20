@@ -1,10 +1,11 @@
 import { Cli, z } from 'incur'
 import { zeroAddress } from 'viem'
-import { encodeFunctionData, getAddress } from 'viem/utils'
-import { getEnsResolver, namehash } from 'viem/ens'
+import { encodeFunctionData, getAddress, toHex } from 'viem/utils'
+import { getEnsResolver, namehash, packetToBytes } from 'viem/ens'
 import { validateName } from '../lib/utils.ts'
 import {
   addresses,
+  compositeResolverAbi,
   ensRegistryAbi,
   publicResolverAbi,
   reverseRegistrarAbi,
@@ -17,7 +18,14 @@ import {
   type Context,
 } from '../lib/context.ts'
 import { coinTypeOptions, resolveCoinType } from '../lib/cointype.ts'
-import { encodeRecordOperation, parseRecordOperations } from '../lib/records.ts'
+import {
+  encodeRecordOperation,
+  encodeV2RecordOperation,
+  supportsV2RecordSetters,
+  isUnsupportedCall,
+  parseRecordOperations,
+  type RecordOperation,
+} from '../lib/records.ts'
 
 type SetContext = Context & { options: { resolver?: string } }
 
@@ -33,8 +41,28 @@ async function resolveTargetResolver(c: SetContext, name: string): Promise<`0x${
   let resolver: `0x${string}` | null = null
   try {
     resolver = await getEnsResolver(client, { name, ...universalResolverParam(c) })
-  } catch {
-    // Universal Resolver lookup failed — fall through to the no-resolver error
+  } catch (error) {
+    // The Universal Resolver reverts when no resolver is found; RPC failures still throw.
+    if (!isUnsupportedCall(error)) throw error
+  }
+
+  // For names not in ENSv2, an ENSv2 Universal Resolver returns its read-only
+  // ENSV1Resolver bridge. Writes must target the v1 resolver it mirrors.
+  if (resolver && resolver !== zeroAddress) {
+    try {
+      const [underlying] = await client.readContract({
+        address: resolver,
+        abi: compositeResolverAbi,
+        functionName: 'getResolver',
+        args: [toHex(packetToBytes(name))],
+      })
+      // Zero means the v1 name has no resolver, so there is nothing writable.
+      resolver = underlying
+    } catch (error) {
+      // Not a composite resolver — write to it directly. RPC failures must not
+      // fall through, or the calldata could target the read-only bridge.
+      if (!isUnsupportedCall(error)) throw error
+    }
   }
 
   if (!resolver || resolver === zeroAddress) {
@@ -46,16 +74,11 @@ async function resolveTargetResolver(c: SetContext, name: string): Promise<`0x${
   return resolver
 }
 
-function encodeSetAddr(node: `0x${string}`, address: string, coinType?: number): `0x${string}` {
-  return encodeRecordOperation(node, { type: 'address', address, coinType })
-}
-
-function encodeSetText(node: `0x${string}`, key: string, value: string): `0x${string}` {
-  return encodeRecordOperation(node, { type: 'text', key, value })
-}
-
-function encodeSetContenthash(node: `0x${string}`, hash: string): `0x${string}` {
-  return encodeRecordOperation(node, { type: 'contenthash', hash })
+async function recordEncoder(c: SetContext, name: string, resolver: `0x${string}`) {
+  const { client } = clientFromContext(c)
+  const v2 = await supportsV2RecordSetters(client, resolver)
+  return (operation: RecordOperation) =>
+    v2 ? encodeV2RecordOperation(name, operation) : encodeRecordOperation(namehash(name), operation)
 }
 
 async function resolveReverseRegistrar(c: Context): Promise<`0x${string}`> {
@@ -147,9 +170,9 @@ export const setCommands = Cli.create('set', {
     async run(c) {
       const name = validateName(c.args.name)
       const resolverAddress = await resolveTargetResolver(c, name)
-      const node = namehash(name)
       const coinType = resolveCoinType(c.options)
-      const data = encodeSetAddr(node, c.options.address, coinType)
+      const encode = await recordEncoder(c, name, resolverAddress)
+      const data = encode({ type: 'address', address: c.options.address, coinType })
       return { to: resolverAddress, data, value: '0' }
     },
   })
@@ -176,8 +199,8 @@ export const setCommands = Cli.create('set', {
     async run(c) {
       const name = validateName(c.args.name)
       const resolverAddress = await resolveTargetResolver(c, name)
-      const node = namehash(name)
-      const data = encodeSetText(node, c.options.key, c.options.value)
+      const encode = await recordEncoder(c, name, resolverAddress)
+      const data = encode({ type: 'text', key: c.options.key, value: c.options.value })
       return { to: resolverAddress, data, value: '0' }
     },
   })
@@ -205,8 +228,8 @@ export const setCommands = Cli.create('set', {
     async run(c) {
       const name = validateName(c.args.name)
       const resolverAddress = await resolveTargetResolver(c, name)
-      const node = namehash(name)
-      const data = encodeSetContenthash(node, c.options.hash)
+      const encode = await recordEncoder(c, name, resolverAddress)
+      const data = encode({ type: 'contenthash', hash: c.options.hash })
       return { to: resolverAddress, data, value: '0' }
     },
   })
@@ -234,9 +257,9 @@ export const setCommands = Cli.create('set', {
     async run(c) {
       const name = validateName(c.args.name)
       const resolverAddress = await resolveTargetResolver(c, name)
-      const node = namehash(name)
       const operations = parseRecordOperations(c.options.data)
-      const calls = operations.map((operation) => encodeRecordOperation(node, operation))
+      const encode = await recordEncoder(c, name, resolverAddress)
+      const calls = operations.map(encode)
 
       const data = encodeFunctionData({
         abi: publicResolverAbi,

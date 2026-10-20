@@ -134,7 +134,7 @@ export const subregistryCommands = Cli.create('subregistry', {
       const initializeData = encodeFunctionData({
         abi: userRegistryAbi,
         functionName: 'initialize',
-        args: [rootAccount, roleBitmap],
+        args: [[{ account: rootAccount, roleBitmap }]],
       })
       const data = encodeFunctionData({
         abi: verifiableFactoryAbi,
