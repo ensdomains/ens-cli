@@ -69,12 +69,21 @@ function optionalString(value: unknown): string | null {
   return typeof value === 'string' && value.trim() ? value.trim() : null
 }
 
-async function sendToSlack(webhookUrl: string, { message, name, contact }: Feedback) {
+async function sendToSlack(webhookUrl: string, feedback: Feedback) {
+  // Collapse whitespace in single-line fields so they can't fake extra lines in the message
+  const name = feedback.name && feedback.name.replace(/\s+/g, ' ')
+  const contact = feedback.contact && feedback.contact.replace(/\s+/g, ' ')
   const from = name && contact ? `${name} (${contact})` : name || contact || 'Anonymous'
   const res = await fetch(webhookUrl, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ message, from }),
+    body: JSON.stringify({ message: escapeSlack(feedback.message), from: escapeSlack(from) }),
   })
   if (!res.ok) console.error(`Slack webhook failed: ${res.status} ${await res.text()}`)
+}
+
+// Escape Slack's control characters so user input can't trigger mentions like <!channel>
+// or disguise links. See https://api.slack.com/reference/surfaces/formatting#escaping
+function escapeSlack(text: string): string {
+  return text.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
 }

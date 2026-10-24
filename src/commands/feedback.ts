@@ -1,7 +1,7 @@
 import { Cli, z } from 'incur'
 
 // TODO: replace with the deployed feedback-worker URL before merging.
-const FEEDBACK_API_URL = 'https://ens-cli-feedback.example.workers.dev'
+const FEEDBACK_API_URL = 'https://example.com/api/feedback'
 
 export const feedbackCommand = Cli.create('feedback', {
   description: 'Send feedback about the ENS CLI to the maintainers',
