@@ -15,6 +15,8 @@ type Feedback = {
 
 const MAX_MESSAGE_LENGTH = 5000
 const MAX_FIELD_LENGTH = 200
+// Room for a max-length message even if every character is JSON-escaped
+const MAX_BODY_BYTES = 64 * 1024
 
 export default {
   async fetch(req: Request, env: Env, ctx: ExecutionContext): Promise<Response> {
@@ -25,8 +27,12 @@ export default {
       )
     }
 
-    const body = await req.json().catch(() => null)
-    const feedback = parseFeedback(body)
+    const text = await readBody(req)
+    if (text === null) {
+      return Response.json({ error: 'Request body too large' }, { status: 413 })
+    }
+
+    const feedback = parseFeedback(parseJson(text))
     if (typeof feedback === 'string') return Response.json({ error: feedback }, { status: 400 })
 
     await env.DB.prepare('INSERT INTO feedback (message, name, contact) VALUES (?, ?, ?)')
@@ -37,6 +43,28 @@ export default {
 
     return Response.json({ ok: true }, { status: 201 })
   },
+}
+
+// Reads the body as text, or returns null if it exceeds MAX_BODY_BYTES. Content-Length
+// alone isn't enough since chunked requests don't send it. Oversized bodies are drained
+// without being buffered, so memory stays bounded.
+async function readBody(req: Request): Promise<string | null> {
+  if (!req.body) return ''
+  const chunks: Uint8Array[] = []
+  let size = 0
+  for await (const chunk of req.body) {
+    size += chunk.byteLength
+    if (size <= MAX_BODY_BYTES) chunks.push(chunk)
+  }
+  return size > MAX_BODY_BYTES ? null : new Blob(chunks).text()
+}
+
+function parseJson(text: string): unknown {
+  try {
+    return JSON.parse(text)
+  } catch {
+    return null
+  }
 }
 
 // Returns the parsed feedback, or an error message if the body is invalid.

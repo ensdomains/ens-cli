@@ -22,7 +22,12 @@ export const feedbackCommand = Cli.create('feedback', {
         contact: c.options.contact,
       }),
     })
-    if (!res.ok) throw new Error(`Failed to send feedback: ${res.status} ${res.statusText}`)
+    if (!res.ok) {
+      const body = (await res.json().catch(() => null)) as { error?: unknown } | null
+      const reason =
+        typeof body?.error === 'string' ? body.error : `${res.status} ${res.statusText}`
+      throw new Error(`Failed to send feedback: ${reason}`)
+    }
     return { sent: true }
   },
 })
