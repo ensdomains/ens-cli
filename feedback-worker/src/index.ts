@@ -1,7 +1,8 @@
-import type { D1Database, ExecutionContext } from '@cloudflare/workers-types'
+import type { D1Database, ExecutionContext, RateLimit } from '@cloudflare/workers-types'
 
 interface Env {
   DB: D1Database
+  RATE_LIMITER: RateLimit
   // Optional Slack Workflow webhook with `message` and `from` variables:
   //   bunx wrangler secret put SLACK_WEBHOOK_URL -c feedback-worker/wrangler.jsonc
   SLACK_WEBHOOK_URL?: string
@@ -26,6 +27,10 @@ export default {
         { status: 405, headers: { Allow: 'POST' } },
       )
     }
+
+    const ip = req.headers.get('CF-Connecting-IP') ?? 'unknown'
+    const { success } = await env.RATE_LIMITER.limit({ key: ip })
+    if (!success) return Response.json({ error: 'Too many requests' }, { status: 429 })
 
     const text = await readBody(req)
     if (text === null) {
