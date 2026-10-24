@@ -15,6 +15,9 @@
     "dev:worker": "wrangler dev",
     "deploy": "wrangler deploy",
     "cf-typegen": "wrangler types",
+    "feedback:dev": "wrangler dev -c feedback-worker/wrangler.jsonc",
+    "feedback:deploy": "wrangler deploy -c feedback-worker/wrangler.jsonc",
+    "feedback:migrate": "wrangler d1 migrations apply ens-cli-feedback -c feedback-worker/wrangler.jsonc",
     "typecheck": "tsc --noEmit",
     "test": "bun test",
     "format": "prettier --write ."

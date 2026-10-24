@@ -1,0 +1,25 @@
+{
+  "$schema": "../node_modules/wrangler/config-schema.json",
+  "name": "ens-cli-feedback",
+  "main": "src/index.ts",
+  "compatibility_date": "2026-06-11",
+  "observability": {
+    "enabled": true,
+  },
+  "d1_databases": [
+    {
+      "binding": "DB",
+      "database_name": "ens-cli-feedback",
+      "database_id": "57f651bc-c80e-40cc-a710-98a2d961256d",
+      "migrations_dir": "migrations",
+    },
+  ],
+  "ratelimits": [
+    {
+      "name": "RATE_LIMITER",
+      // First 8 bytes of keccak256("cli-feedback"), so it won't collide with other limiters in the account
+      "namespace_id": "4307167179837639519",
+      "simple": { "limit": 2, "period": 60 },
+    },
+  ],
+}
