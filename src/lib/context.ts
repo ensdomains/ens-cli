@@ -2,7 +2,13 @@ import { z } from 'incur'
 import { isAddressEqual, zeroAddress, type ContractFunctionReturnType } from 'viem'
 import { labelhash } from 'viem/ens'
 import { createEnsClient } from './client.ts'
-import { addresses, universalResolverAbi, v2RegistryAbi, type Chain } from './contracts.ts'
+import {
+  addresses,
+  ethRegistrarAbi,
+  universalResolverAbi,
+  v2RegistryAbi,
+  type Chain,
+} from './contracts.ts'
 import { eth2ldLabelForName } from './utils.ts'
 import { V2Status } from './v2.ts'
 
@@ -41,10 +47,8 @@ export function universalResolverAddress(c: Context, chain: Chain): `0x${string}
   return universalResolverOverride(c) ?? addresses[chain].universalResolver
 }
 
-// Switch to help with logic around ENSv2.
-// Without a name, check whether the UR supports v2. With a name, also require
-// its anchoring .eth 2LD to be registered or previously registered in v2.
-const UNIVERSAL_RESOLVER_V2_INTERFACE_ID = '0xf99a5e06'
+// contracts-v2 INormalizedUniversalResolver includes isENSv2().
+const NORMALIZED_UNIVERSAL_RESOLVER_INTERFACE_ID = '0xfe0badd6'
 type V2RegistryState = ContractFunctionReturnType<typeof v2RegistryAbi, 'view', 'getState'>
 
 type V2Inactive = { readonly isV2: false }
@@ -57,19 +61,33 @@ export async function isV2Active(c: Context, name?: string) {
   const { client, chain } = clientFromContext(c)
   const resolver = universalResolverAddress(c, chain)
 
-  const supportsV2 = await client.readContract({
+  const supportsVersionCheck = await client.readContract({
     address: resolver,
     abi: universalResolverAbi,
     functionName: 'supportsInterface',
-    args: [UNIVERSAL_RESOLVER_V2_INTERFACE_ID],
+    args: [NORMALIZED_UNIVERSAL_RESOLVER_INTERFACE_ID],
   })
-  if (!supportsV2) return { isV2: false } as const
-
-  const ethRegistry = await client.readContract({
+  if (!supportsVersionCheck) return { isV2: false } as const
+  const isV2 = await client.readContract({
     address: resolver,
     abi: universalResolverAbi,
-    functionName: 'findCanonicalRegistry',
-    args: ['0x0365746800'],
+    functionName: 'isENSv2',
+  })
+  if (!isV2) return { isV2: false } as const
+
+  // Registry-walking methods moved to UniversalHelper. Read the selected UR's
+  // root directly so a --universal-resolver override cannot mix deployments.
+  const rootRegistry = await client.readContract({
+    address: resolver,
+    abi: universalResolverAbi,
+    functionName: 'ROOT_REGISTRY',
+  })
+  if (rootRegistry === zeroAddress) throw new Error('ENSv2 Universal Resolver has no root registry')
+  const ethRegistry = await client.readContract({
+    address: rootRegistry,
+    abi: v2RegistryAbi,
+    functionName: 'getSubregistry',
+    args: ['eth'],
   })
   if (ethRegistry === zeroAddress) throw new Error('ENSv2 Universal Resolver has no .eth registry')
 
@@ -98,19 +116,25 @@ export async function isV2Active(c: Context, name?: string) {
   return { isV2: true, ethRegistry } as const
 }
 
-function configuredV2Deployment(c: Context, ethRegistry: `0x${string}`) {
+async function configuredV2Deployment(c: Context, ethRegistry: `0x${string}`) {
   const deployment = v2DeploymentForChain(c.options.chain ?? 'mainnet')
   if (!deployment) {
     throw new Error(
       `ENSv2 deployment is not configured for chain "${c.options.chain ?? 'mainnet'}"`,
     )
   }
-  if (!isAddressEqual(deployment.registry, ethRegistry)) {
+  const { client } = clientFromContext(c)
+  const registrarRegistry = await client.readContract({
+    address: deployment.registrar,
+    abi: ethRegistrarAbi,
+    functionName: 'ETH_REGISTRY',
+  })
+  if (!isAddressEqual(registrarRegistry, ethRegistry)) {
     throw new Error(
-      `Configured ENSv2 registry ${deployment.registry} does not match Universal Resolver registry ${ethRegistry}`,
+      `Configured ENSv2 registrar registry ${registrarRegistry} does not match Universal Resolver registry ${ethRegistry}`,
     )
   }
-  return deployment
+  return { ...deployment, registry: ethRegistry }
 }
 
 export async function activeV2Deployment(c: Context) {
@@ -121,7 +145,28 @@ export async function activeV2Deployment(c: Context) {
 export async function activeV2Name(c: Context, name: string) {
   const v2 = await isV2Active(c, name)
   if (!v2.isV2) return undefined
-  return { ...v2, deployment: configuredV2Deployment(c, v2.ethRegistry) }
+  return { ...v2, deployment: await configuredV2Deployment(c, v2.ethRegistry) }
+}
+
+export async function renewalTarget(c: Context, label: string) {
+  const deployment = await activeV2Deployment(c)
+  if (!deployment) return undefined
+  const { client } = clientFromContext(c)
+  const state = await client.readContract({
+    address: deployment.registry,
+    abi: v2RegistryAbi,
+    functionName: 'getState',
+    args: [BigInt(labelhash(label))],
+  })
+  // ETHRenewerV1._isRenewable includes expired reservations in grace.
+  // The contracts validate grace and duration; status alone cannot identify v1.
+  const isV1 =
+    state.status === V2Status.RESERVED ||
+    (state.status === V2Status.AVAILABLE && state.latestOwner === zeroAddress)
+  return {
+    deployment,
+    address: isV1 ? deployment.renewerV1 : deployment.registrar,
+  }
 }
 
 export function v2DeploymentForChain(chain: Chain) {

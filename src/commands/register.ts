@@ -100,7 +100,6 @@ export const registerCommands = Cli.create('register', {
           : await resolveDeployedOwnedResolver({
               client,
               factory: v2Deployment.resolverFactory,
-              proxyLogic: v2Deployment.resolverProxyLogic,
               owner,
             })
         const paymentToken = c.options.paymentToken
@@ -281,7 +280,6 @@ export const registerCommands = Cli.create('register', {
           : await resolveDeployedOwnedResolver({
               client,
               factory: v2Deployment.resolverFactory,
-              proxyLogic: v2Deployment.resolverProxyLogic,
               owner,
             })
         const paymentToken = c.options.paymentToken

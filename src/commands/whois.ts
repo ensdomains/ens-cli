@@ -57,7 +57,7 @@ export const whoisCommand = Cli.create('whois', {
 
       const { ethRegistry, nameState } = v2
       const { status, expiry, latestOwner, tokenId, resource } = nameState
-      const [{ resolver }, owner] = await Promise.all([
+      const [[resolver], owner] = await Promise.all([
         client.readContract({
           address: universalResolverAddress(c, chain),
           abi: universalResolverAbi,

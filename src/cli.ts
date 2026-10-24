@@ -17,7 +17,8 @@ export const cli = Cli.create('ens', {
   version: packageJson.version,
   description: 'Read ENS data and generate unsigned transaction calldata for name management.',
   mcp: {
-    command: 'npx "https://pkg.pr.new/ensdomains/cli/@ensdomains/cli@main" --mcp',
+    tools: { discovery: 'direct' },
+    command: 'npx "https://pkg.pr.new/ensdomains/ens-cli/@ensdomains/cli@main" --mcp',
   },
 })
   // Resolution
