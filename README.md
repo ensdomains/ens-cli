@@ -248,6 +248,9 @@ ens set batch myname.eth --data '[
 ```sh
 # Send feedback about the CLI to the maintainers
 ens feedback "It would be great to have a command for X"
+
+# Optionally include your name and a way to reach you
+ens feedback "Found a bug in ens set" --name Alice --contact alice@example.com
 ```
 
 ## Configuration
