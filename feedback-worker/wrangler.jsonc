@@ -10,8 +10,7 @@
     {
       "binding": "DB",
       "database_name": "ens-cli-feedback",
-      // Create with `bunx wrangler d1 create ens-cli-feedback` and paste the id here
-      "database_id": "00000000-0000-0000-0000-000000000000",
+      "database_id": "57f651bc-c80e-40cc-a710-98a2d961256d",
       "migrations_dir": "migrations",
     },
   ],
