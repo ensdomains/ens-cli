@@ -19,8 +19,8 @@
       "name": "RATE_LIMITER",
       // Arbitrary id, unique within the Cloudflare account
       "namespace_id": "1001",
-      // 5 requests per IP per minute (period must be 10 or 60 seconds)
-      "simple": { "limit": 5, "period": 60 },
+      // 2 requests per IP per minute (period must be 10 or 60 seconds)
+      "simple": { "limit": 2, "period": 60 },
     },
   ],
 }
