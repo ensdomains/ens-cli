@@ -17,8 +17,9 @@
   "ratelimits": [
     {
       "name": "RATE_LIMITER",
-      // Arbitrary id, unique within the Cloudflare account
-      "namespace_id": "1001",
+      // First 8 bytes of keccak256("cli-feedback"), so it won't collide with other limiters in the
+      // account. Must fit in a signed 64-bit integer: cast to-dec $(cast keccak cli-feedback | cut -c1-18)
+      "namespace_id": "4307167179837639519",
       // 2 requests per IP per minute (period must be 10 or 60 seconds)
       "simple": { "limit": 2, "period": 60 },
     },
