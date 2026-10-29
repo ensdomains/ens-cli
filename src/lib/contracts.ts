@@ -294,7 +294,7 @@ export const addresses = {
     universalResolver: '0xeEeEEEeE14D718C2B47D9923Deab1335E144EeEe',
     nameWrapper: '0xD4416b13d2b3a9aBae7AcD5D6C2BbDBE25686401',
     // 2026-10-18 deployment (first deployed 2026-10-02). Only used
-    // once the Universal Resolver reports ENSv2, so this is inert until cutover.
+    // while the Universal Resolver reports ENSv2.
     v2: {
       registrar: '0xD6D8369e55c94Ae8AFA714E6cF7AB5bE54D5CC81',
       renewerV1: '0x56c447F308F463A01121C41E72b0E7e7557fCb68',
