@@ -220,12 +220,13 @@ export const migrateCommand = Cli.create('migrate', {
       isAddressEqual(ownedResolver, zeroAddress)
     ) {
       const deployHint = `run "ens resolver deploy ${owner} --name ${name} --records <json> --chain ${chain}" and regenerate this migration with --resolver <address>`
-      // ENSv1 resolvers authorize writes through ENSv1 registry ownership, which migration gives up.
+      // The ENSv1 Public Resolver authorizes writes through ENSv1 registry ownership, which migration
+      // gives up. Custom resolvers may authorize writes some other way, so this can't be stated outright.
       flags.push(
         isAddressEqual(currentResolver, zeroAddress) ||
           (await supportsV2RecordSetters(client, currentResolver))
           ? `Recommendation: no canonical OwnedResolver is deployed for ${owner}, so the current ENSv1 resolver is being reused. Verify it authorizes the ENSv2 owner to update records, or ${deployHint}.`
-          : `Warning: no canonical OwnedResolver is deployed for ${owner}, so the current ENSv1 resolver ${currentResolver} is being reused. It lacks ENSv2 record setters and authorizes updates through ENSv1 registry ownership, which migration gives up: existing records keep resolving but can no longer be changed until the resolver is replaced. To keep records editable, ${deployHint}.`,
+          : `Warning: no canonical OwnedResolver is deployed for ${owner}, so the current ENSv1 resolver ${currentResolver} is being reused. It lacks ENSv2 record setters. If it authorizes updates through ENSv1 registry ownership, as the ENSv1 Public Resolver does, migration gives that up: existing records keep resolving but can no longer be changed until the resolver is replaced. To keep records editable, ${deployHint}.`,
       )
     }
     if (wrapped) {

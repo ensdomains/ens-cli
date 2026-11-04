@@ -4,6 +4,7 @@ import { encodeFunctionData, getAddress } from 'viem/utils'
 import { ethRegistrarControllerAbi, ethRenewerAbi, addresses } from '../lib/contracts.ts'
 import { globalOptions, globalEnv, clientFromContext, renewalTarget } from '../lib/context.ts'
 import { extractLabel, asHex, durationFromOption } from '../lib/utils.ts'
+import { getRenewPrice } from '../lib/v2.ts'
 
 export const renewCommand = Cli.create('renew', {
   description: 'Generate renewal transaction calldata for an ENS name.',
@@ -32,7 +33,7 @@ export const renewCommand = Cli.create('renew', {
   ),
   env: globalEnv,
   async run(c) {
-    const { chain } = clientFromContext(c)
+    const { client, chain } = clientFromContext(c)
     const controllerAddress = addresses[chain].controller
     const label = extractLabel(c.args.name)
     const duration = durationFromOption(c.options.duration)
@@ -46,6 +47,7 @@ export const renewCommand = Cli.create('renew', {
       const paymentToken = c.options.paymentToken
         ? getAddress(c.options.paymentToken)
         : target.deployment.paymentToken
+      await getRenewPrice({ client, renewer: target.address, label, duration, paymentToken })
       const data = encodeFunctionData({
         abi: ethRenewerAbi,
         functionName: 'renew',

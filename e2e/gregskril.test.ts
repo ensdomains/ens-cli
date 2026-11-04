@@ -41,8 +41,10 @@ for (const chain of ['mainnet', 'sepolia'] as const) {
     let fork: Fork
     let ethRegistry: Address
     let v1Resolver: Address
-    // The ENSv1 token holder, who migrates the name and owns it in ENSv2.
+    // The ENSv1 token holder, who sends the migration.
     let registrant: Address
+    // A fresh ENSv2 owner: it has no OwnedResolver, whatever the holder has deployed on the live chain.
+    let v2Owner: Address
     let ownedResolver: Address
 
     beforeAll(async () => {
@@ -63,6 +65,7 @@ for (const chain of ['mainnet', 'sepolia'] as const) {
           })
       await fork.fund(MANAGER)
       await fork.fund(registrant)
+      v2Owner = await fork.account()
     })
 
     afterAll(() => fork?.stop())
@@ -158,6 +161,7 @@ for (const chain of ['mainnet', 'sepolia'] as const) {
         const text = await fork.ens('set', 'text', NAME, '--key', 'e2e', '--value', 'v1')
         expect(text).toMatchObject({ to: v1Resolver })
         expect(text.data.slice(0, 10)).toBe('0x10f13a8c') // setText(bytes32,string,string)
+        expect(text.warning).toBeUndefined()
         await fork.send(MANAGER, text)
         expect(await fork.ens('get', 'text', NAME, '--key', 'e2e')).toMatchObject({ value: 'v1' })
 
@@ -170,8 +174,9 @@ for (const chain of ['mainnet', 'sepolia'] as const) {
         expect(await fork.ens('get', 'text', NAME, '--key', 'com.github')).toMatchObject({
           value: 'gskril',
         })
-        const optimism = await fork.ens('get', 'address', NAME, '--chain-id', '10')
-        expect(optimism.address.toLowerCase()).toBe(MANAGER.toLowerCase())
+        expect(await fork.ens('get', 'address', NAME, '--chain-id', '10')).toMatchObject({
+          address: MANAGER,
+        })
 
         await fork.send(MANAGER, await fork.ens('set', 'address', NAME, '--address', MANAGER))
         expect(await fork.ens('get', 'address', NAME)).toMatchObject({ address: MANAGER })
@@ -208,15 +213,20 @@ for (const chain of ['mainnet', 'sepolia'] as const) {
       })
     })
 
-    describe('migrating to ENSv2 with the defaults', () => {
+    describe('migrating to ENSv2 with the default resolver', () => {
       test('migrate warns that the reused v1 resolver becomes read-only', async () => {
-        const migrate = await fork.ens('migrate', NAME)
+        expect(await fork.ens('migrate', NAME)).toMatchObject({
+          currentOwner: registrant,
+          owner: registrant,
+        })
+
+        const migrate = await fork.ens('migrate', NAME, '--owner', v2Owner)
         expect(migrate).toMatchObject({
           kind: wrapped ? 'wrapped-unlocked' : 'unwrapped',
           to: wrapped ? v1.nameWrapper : v1.baseRegistrar,
           controller: v2.unlockedMigrationController,
           currentOwner: registrant,
-          owner: registrant,
+          owner: v2Owner,
           resolver: v1Resolver,
         })
         expect(migrate.flags[0]).toStartWith('Warning: no canonical OwnedResolver')
@@ -226,7 +236,7 @@ for (const chain of ['mainnet', 'sepolia'] as const) {
 
         const whois = await fork.ens('whois', NAME)
         expect(whois).toMatchObject({
-          owner: registrant,
+          owner: v2Owner,
           resolver: v1Resolver,
           registry: ethRegistry,
           status: 'REGISTERED',
@@ -245,7 +255,8 @@ for (const chain of ['mainnet', 'sepolia'] as const) {
       test('records on the reused v1 resolver can no longer be changed', async () => {
         const text = await fork.ens('set', 'text', NAME, '--key', 'e2e', '--value', 'changed')
         expect(text.to).toBe(v1Resolver)
-        for (const from of [registrant, MANAGER]) {
+        expect(text.warning).toContain('is registered in ENSv2, but')
+        for (const from of [v2Owner, registrant, MANAGER]) {
           await expect(fork.send(from, text)).rejects.toThrow()
         }
       })
@@ -254,7 +265,7 @@ for (const chain of ['mainnet', 'sepolia'] as const) {
         const deploy = await fork.ens(
           'resolver',
           'deploy',
-          registrant,
+          v2Owner,
           '--name',
           NAME,
           '--records',
@@ -265,15 +276,15 @@ for (const chain of ['mainnet', 'sepolia'] as const) {
         )
         expect(deploy).toMatchObject({ to: v2.resolverFactory, alreadyDeployed: false })
         ownedResolver = deploy.resolver
-        await fork.send(registrant, deploy)
-        expect(await fork.ens('resolver', 'deploy', registrant)).toMatchObject({
+        await fork.send(v2Owner, deploy)
+        expect(await fork.ens('resolver', 'deploy', v2Owner)).toMatchObject({
           resolver: ownedResolver,
           alreadyDeployed: true,
         })
 
         const set = await fork.ens('resolver', 'set', NAME, '--resolver', ownedResolver)
         expect(set).toMatchObject({ to: ethRegistry, version: 'v2' })
-        await fork.send(registrant, set)
+        await fork.send(v2Owner, set)
         expect(await fork.ens('whois', NAME)).toMatchObject({ resolver: ownedResolver })
         expect(await fork.ens('get', 'address', NAME)).toMatchObject({ address: MANAGER })
         expect(await fork.ens('get', 'avatar', NAME)).toMatchObject({ avatar: AVATAR })
@@ -293,27 +304,25 @@ for (const chain of ['mainnet', 'sepolia'] as const) {
           'https://gregskril.com',
         )
         expect(text.to).toBe(ownedResolver)
-        await fork.send(registrant, text)
+        expect(text.warning).toBeUndefined()
+        await fork.send(v2Owner, text)
         expect(await fork.ens('get', 'text', NAME, '--key', 'url')).toMatchObject({
           value: 'https://gregskril.com',
         })
 
-        await fork.send(
-          registrant,
-          await fork.ens('set', 'contenthash', NAME, '--hash', CONTENTHASH),
-        )
+        await fork.send(v2Owner, await fork.ens('set', 'contenthash', NAME, '--hash', CONTENTHASH))
         const other = await fork.account()
         const batch = JSON.stringify([
           { type: 'address', address: other, coinType: 60 },
           { type: 'text', key: 'com.github', value: 'gskril' },
         ])
-        await fork.send(registrant, await fork.ens('set', 'batch', NAME, '--data', batch))
+        await fork.send(v2Owner, await fork.ens('set', 'batch', NAME, '--data', batch))
         expect(await fork.ens('get', 'address', NAME)).toMatchObject({ address: other })
         expect(await fork.ens('get', 'text', NAME, '--key', 'com.github')).toMatchObject({
           value: 'gskril',
         })
 
-        await fork.send(registrant, await fork.ens('set', 'address', NAME, '--address', MANAGER))
+        await fork.send(v2Owner, await fork.ens('set', 'address', NAME, '--address', MANAGER))
         expect(await fork.ens('get', 'address', NAME)).toMatchObject({ address: MANAGER })
       })
 
@@ -330,21 +339,22 @@ for (const chain of ['mainnet', 'sepolia'] as const) {
         expect(price).toMatchObject({ registrar: v2.registrar, premium: '0' })
         const renew = await fork.ens('renew', NAME)
         expect(renew).toMatchObject({ to: v2.registrar, value: '0' })
-        await payFor(registrant, v2.registrar, BigInt(price.total))
-        await fork.send(registrant, renew)
+        await payFor(v2Owner, v2.registrar, BigInt(price.total))
+        await fork.send(v2Owner, renew)
         expect((await state(ethRegistry, LABEL)).expiry - before.expiry).toBe(YEAR)
       })
 
       test('subregistry deploy and set, then subname create', async () => {
-        const deploy = await fork.ens('subregistry', 'deploy', NAME, '--deployer', registrant)
-        expect(deploy).toMatchObject({ alreadySet: false, rootAccount: registrant })
-        await fork.send(registrant, deploy)
+        const deploy = await fork.ens('subregistry', 'deploy', NAME, '--deployer', v2Owner)
+        expect(deploy).toMatchObject({ alreadySet: false, rootAccount: v2Owner })
+        await fork.send(v2Owner, deploy)
         const set = await fork.ens('subregistry', 'set', NAME, '--registry', deploy.subregistry)
         expect(set.to).toBe(ethRegistry)
-        await fork.send(registrant, set)
-        expect(
-          await fork.ens('subregistry', 'deploy', NAME, '--deployer', registrant),
-        ).toMatchObject({ alreadySet: true, subregistry: deploy.subregistry })
+        await fork.send(v2Owner, set)
+        expect(await fork.ens('subregistry', 'deploy', NAME, '--deployer', v2Owner)).toMatchObject({
+          alreadySet: true,
+          subregistry: deploy.subregistry,
+        })
 
         const subOwner = await fork.account()
         const create = await fork.ens(
@@ -357,7 +367,7 @@ for (const chain of ['mainnet', 'sepolia'] as const) {
           ownedResolver,
         )
         expect(create).toMatchObject({ to: deploy.subregistry, owner: subOwner })
-        await fork.send(registrant, create)
+        await fork.send(v2Owner, create)
         const sub = await state(deploy.subregistry, 'cli')
         expect(sub.status).toBe(2)
         expect(
@@ -373,31 +383,31 @@ for (const chain of ['mainnet', 'sepolia'] as const) {
       test('register commit and reveal a fresh name with the owned resolver', async () => {
         const name = `${freshLabel('gsk')}.eth`
         expect(await fork.ens('available', name)).toMatchObject({ available: true, version: 'v2' })
-        const commit = await fork.ens('register', 'commit', name, '--owner', registrant)
+        const commit = await fork.ens('register', 'commit', name, '--owner', v2Owner)
         expect(commit).toMatchObject({
           to: v2.registrar,
           resolver: ownedResolver,
           resolverSource: 'ownedResolver',
         })
-        await fork.send(registrant, commit)
+        await fork.send(v2Owner, commit)
         await fork.advance(70)
 
         const price = await fork.ens('price', name)
         expect(price).toMatchObject({ operation: 'registration', paymentToken: v2.paymentToken })
-        await payFor(registrant, v2.registrar, BigInt(price.total))
+        await payFor(v2Owner, v2.registrar, BigInt(price.total))
         const reveal = await fork.ens(
           'register',
           'reveal',
           name,
           '--owner',
-          registrant,
+          v2Owner,
           '--secret',
           commit.secret,
         )
         expect(reveal.value).toBe('0')
-        await fork.send(registrant, reveal)
+        await fork.send(v2Owner, reveal)
         expect(await fork.ens('whois', name)).toMatchObject({
-          owner: registrant,
+          owner: v2Owner,
           resolver: ownedResolver,
           status: 'REGISTERED',
         })

@@ -1,5 +1,5 @@
 import { afterAll, beforeAll, describe, expect, setDefaultTimeout, test } from 'bun:test'
-import { erc20Abi, parseAbi, type Address } from 'viem'
+import { erc20Abi, parseAbi, zeroAddress, zeroHash, type Address } from 'viem'
 import { labelhash } from 'viem/ens'
 import { addresses } from '../src/lib/contracts.ts'
 import { freshLabel, startFork, type Fork } from './harness.ts'
@@ -11,10 +11,20 @@ const v2 = addresses.mainnet.v2
 const ETH_REGISTRY = '0xf60aba43E1f7F3DAB1186Ff03B561401C9Df85E2'
 const YEAR = 31_536_000n
 const CONTENTHASH = '0xe3010170122029f2d17be6139079dc48696d1f582a8530eb9805b561eda517e22a892c7e3f1f'
+const USDT = '0xdAC17F958D2ee523a2206206994597C13D831ec7'
+const CANNOT_UNWRAP = 1
 
 const registryAbi = parseAbi([
   'function getState(uint256 anyId) view returns ((uint8 status, uint64 expiry, address latestOwner, uint256 tokenId, uint256 resource))',
   'function ownerOf(uint256 tokenId) view returns (address)',
+])
+const baseRegistrarAbi = parseAbi([
+  'function ownerOf(uint256 id) view returns (address)',
+  'function transferFrom(address from, address to, uint256 id)',
+  'function approve(address to, uint256 id)',
+])
+const nameWrapperAbi = parseAbi([
+  'function wrapETH2LD(string label, address owner, uint16 ownerControlledFuses, address resolver) returns (uint64)',
 ])
 
 let fork: Fork
@@ -142,8 +152,9 @@ describe('ENSv2 on mainnet', () => {
     expect(await fork.ens('get', 'text', name, '--key', 'com.github')).toMatchObject({
       value: 'ensdomains',
     })
-    const optimism = await fork.ens('get', 'address', name, '--chain-id', '10')
-    expect(optimism.address.toLowerCase()).toBe(owner.toLowerCase())
+    expect(await fork.ens('get', 'address', name, '--chain-id', '10')).toMatchObject({
+      address: owner,
+    })
   })
 
   test('set name sets and clears the primary name', async () => {
@@ -202,6 +213,68 @@ describe('ENSv2 on mainnet', () => {
         args: [sub.tokenId],
       }),
     ).toBe(subOwner)
+
+    await expect(fork.ens('subname', 'create', `sub.${name}`, '--owner', subOwner)).rejects.toThrow(
+      'already registered',
+    )
+  })
+
+  test('address records are checksummed on EVM coin types and validated when set', async () => {
+    const lower = owner.toLowerCase()
+    await fork.send(
+      owner,
+      await fork.ens('set', 'address', name, '--address', lower, '--coin-type', '61'),
+    )
+    expect(await fork.ens('get', 'address', name, '--coin-type', '61')).toMatchObject({
+      address: owner,
+    })
+
+    // 20 bytes on a non-EVM coin type are not an EVM address.
+    await fork.send(
+      owner,
+      await fork.ens('set', 'address', name, '--address', lower, '--coin-type', '2'),
+    )
+    expect(await fork.ens('get', 'address', name, '--coin-type', '2')).toMatchObject({
+      address: lower,
+    })
+
+    await expect(
+      fork.ens('set', 'address', name, '--address', '0x1234', '--chain-id', '10'),
+    ).rejects.toThrow('Invalid EVM address')
+  })
+
+  test('register, price and renew reject what the contracts would revert on', async () => {
+    const unregistered = `${freshLabel('e2e')}.eth`
+    const commit = ['register', 'commit']
+
+    await expect(fork.ens(...commit, name, '--owner', owner)).rejects.toThrow('Cannot register')
+    await expect(fork.ens('price', name)).rejects.toThrow('Cannot register')
+    await expect(
+      fork.ens(...commit, unregistered, '--owner', owner, '--duration', '100'),
+    ).rejects.toThrow('Cannot register')
+    await expect(fork.ens('price', unregistered, '--paymentToken', USDT)).rejects.toThrow(
+      'Cannot register',
+    )
+    await expect(fork.ens(...commit, unregistered, '--owner', zeroAddress)).rejects.toThrow(
+      'zero address',
+    )
+    await expect(
+      fork.ens(
+        'register',
+        'reveal',
+        unregistered,
+        '--owner',
+        owner,
+        '--secret',
+        zeroHash,
+        '--value',
+        '1',
+      ),
+    ).rejects.toThrow('Do not send ETH value')
+
+    await expect(fork.ens('renew', unregistered)).rejects.toThrow('Cannot renew')
+    await expect(fork.ens('price', unregistered, '--renew')).rejects.toThrow('Cannot renew')
+    await expect(fork.ens('renew', name, '--payment-token', USDT)).rejects.toThrow('Cannot renew')
   })
 })
 
@@ -270,5 +343,43 @@ describe('existing mainnet names', () => {
       expect(tx.to.toLowerCase()).toBe(resolver.toLowerCase())
       expect(tx.data.slice(0, 10)).toBe('0x10f13a8c')
     }
+  })
+
+  // Migrates the reserved name on the fork, so it must run last.
+  test('migrate moves a wrapped locked name through the locked controller', async () => {
+    const tokenId = BigInt(labelhash('vitalik'))
+    const holder = await fork.client.readContract({
+      address: v1.baseRegistrar,
+      abi: baseRegistrarAbi,
+      functionName: 'ownerOf',
+      args: [tokenId],
+    })
+    // A fresh account can receive the wrapped token whatever code the real holder has.
+    const owner = await fork.account()
+    await fork.fund(holder)
+    await fork.write(holder, v1.baseRegistrar, baseRegistrarAbi, 'transferFrom', [
+      holder,
+      owner,
+      tokenId,
+    ])
+    await fork.write(owner, v1.baseRegistrar, baseRegistrarAbi, 'approve', [
+      v1.nameWrapper,
+      tokenId,
+    ])
+    await fork.write(owner, v1.nameWrapper, nameWrapperAbi, 'wrapETH2LD', [
+      'vitalik',
+      owner,
+      CANNOT_UNWRAP,
+      v1.resolver,
+    ])
+
+    const migrate = await fork.ens('migrate', reserved)
+    expect(migrate).toMatchObject({
+      kind: 'wrapped-locked',
+      to: v1.nameWrapper,
+      controller: v2.lockedMigrationController,
+    })
+    await fork.send(owner, migrate)
+    expect(await fork.ens('whois', reserved)).toMatchObject({ owner, status: 'REGISTERED' })
   })
 })

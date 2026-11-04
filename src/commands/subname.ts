@@ -6,6 +6,7 @@ import { addresses, ensRegistryAbi, nameWrapperAbi, v2RegistryAbi } from '../lib
 import { globalOptions, globalEnv, clientFromContext, activeV2Name } from '../lib/context.ts'
 import { durationFromOption, validateName } from '../lib/utils.ts'
 import {
+  V2Status,
   V2_DEFAULT_OWNER_ROLE_BITMAP,
   getV2ParentRegistryForName,
   parseBigIntOption,
@@ -82,8 +83,18 @@ export const subnameCommands = Cli.create('subname', {
 
       if (isAddressEqual(parent.registry, zeroAddress)) {
         throw new Error(
-          `Parent "${parent.parent}" has no ENSv2 subregistry, so "${name}" cannot be created. Run subregistry deploy/set for "${parent.missingName}" first.`,
+          `Parent "${parent.parent}" has expired or has no ENSv2 subregistry, so "${name}" cannot be created. Renew it if it has expired, or run subregistry deploy/set for "${parent.missingName}".`,
         )
+      }
+
+      const { status } = await client.readContract({
+        address: parent.registry,
+        abi: v2RegistryAbi,
+        functionName: 'getState',
+        args: [BigInt(labelhash(parent.label))],
+      })
+      if (status === V2Status.REGISTERED) {
+        throw new Error(`"${name}" is already registered in ${parent.registry}.`)
       }
 
       const owner = getAddress(c.options.owner)

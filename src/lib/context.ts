@@ -124,11 +124,22 @@ async function configuredV2Deployment(c: Context, ethRegistry: `0x${string}`) {
     )
   }
   const { client } = clientFromContext(c)
-  const registrarRegistry = await client.readContract({
-    address: deployment.registrar,
-    abi: ethRegistrarAbi,
-    functionName: 'ETH_REGISTRY',
-  })
+  const registrarRegistry = await client
+    .readContract({
+      address: deployment.registrar,
+      abi: ethRegistrarAbi,
+      functionName: 'ETH_REGISTRY',
+    })
+    .catch(async (error) => {
+      // A registrar with no code is usually an RPC on the wrong chain.
+      const rpcChainId = await client.getChainId()
+      if (rpcChainId !== client.chain.id) {
+        throw new Error(
+          `The RPC is on chain ${rpcChainId}, but --chain ${c.options.chain ?? 'mainnet'} is chain ${client.chain.id}.`,
+        )
+      }
+      throw error
+    })
   if (!isAddressEqual(registrarRegistry, ethRegistry)) {
     throw new Error(
       `Configured ENSv2 registrar registry ${registrarRegistry} does not match Universal Resolver registry ${ethRegistry}`,
