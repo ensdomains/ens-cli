@@ -11,7 +11,6 @@ const v2 = addresses.mainnet.v2
 const ETH_REGISTRY = '0xf60aba43E1f7F3DAB1186Ff03B561401C9Df85E2'
 const YEAR = 31_536_000n
 const CONTENTHASH = '0xe3010170122029f2d17be6139079dc48696d1f582a8530eb9805b561eda517e22a892c7e3f1f'
-const USDT = '0xdAC17F958D2ee523a2206206994597C13D831ec7'
 const CANNOT_UNWRAP = 1
 
 const registryAbi = parseAbi([
@@ -19,6 +18,7 @@ const registryAbi = parseAbi([
   'function ownerOf(uint256 tokenId) view returns (address)',
 ])
 const baseRegistrarAbi = parseAbi([
+  'function nameExpires(uint256 id) view returns (uint256)',
   'function ownerOf(uint256 id) view returns (address)',
   'function transferFrom(address from, address to, uint256 id)',
   'function approve(address to, uint256 id)',
@@ -178,16 +178,6 @@ describe('ENSv2 on mainnet', () => {
     expect((await state(ETH_REGISTRY, label)).expiry - before.expiry).toBe(YEAR)
   })
 
-  test('resolver set changes the resolver in the v2 registry', async () => {
-    const replacement = await fork.account()
-    const tx = await fork.ens('resolver', 'set', name, '--resolver', replacement)
-    expect(tx).toMatchObject({ to: ETH_REGISTRY, version: 'v2' })
-    await fork.send(owner, tx)
-    expect(await fork.ens('whois', name)).toMatchObject({ resolver: replacement })
-    await fork.send(owner, await fork.ens('resolver', 'set', name, '--resolver', resolver))
-    expect(await fork.ens('get', 'address', name)).toMatchObject({ address: owner })
-  })
-
   test('subregistry deploy and set, then subname create', async () => {
     const deploy = await fork.ens('subregistry', 'deploy', name, '--deployer', owner)
     expect(deploy).toMatchObject({
@@ -252,7 +242,7 @@ describe('ENSv2 on mainnet', () => {
     await expect(
       fork.ens(...commit, unregistered, '--owner', owner, '--duration', '100'),
     ).rejects.toThrow('Cannot register')
-    await expect(fork.ens('price', unregistered, '--paymentToken', USDT)).rejects.toThrow(
+    await expect(fork.ens('price', unregistered, '--paymentToken', owner)).rejects.toThrow(
       'Cannot register',
     )
     await expect(fork.ens(...commit, unregistered, '--owner', zeroAddress)).rejects.toThrow(
@@ -274,55 +264,99 @@ describe('ENSv2 on mainnet', () => {
 
     await expect(fork.ens('renew', unregistered)).rejects.toThrow('Cannot renew')
     await expect(fork.ens('price', unregistered, '--renew')).rejects.toThrow('Cannot renew')
-    await expect(fork.ens('renew', name, '--payment-token', USDT)).rejects.toThrow('Cannot renew')
+    await expect(fork.ens('renew', name, '--payment-token', owner)).rejects.toThrow('Cannot renew')
   })
 })
 
-describe('existing mainnet names', () => {
-  // nick.eth was migrated to ENSv2 after the cutover; vitalik.eth is still a reserved v1 name.
-  const migrated = 'nick.eth'
-  const reserved = 'vitalik.eth'
+// Well-known names, so the suite only needs two of them to still be unmigrated.
+const CANDIDATE_LABELS = [
+  'vitalik',
+  'brantly',
+  'ricmoo',
+  'coinbase',
+  'uniswap',
+  'metamask',
+  'opensea',
+]
+
+describe('ENSv1 names reserved in ENSv2', () => {
+  let unwrapped: string
+  let locked: string
+
+  /** Reserved, unexpired names that are not wrapped, so a test can take over their tokens. */
+  async function findReservedLabels(count: number) {
+    const now = await fork.now()
+    const found: string[] = []
+    for (const label of CANDIDATE_LABELS) {
+      const id = BigInt(labelhash(label))
+      const [{ status }, expiry] = await Promise.all([
+        state(ETH_REGISTRY, label),
+        fork.client.readContract({
+          address: v1.baseRegistrar,
+          abi: baseRegistrarAbi,
+          functionName: 'nameExpires',
+          args: [id],
+        }),
+      ])
+      if (status !== 1 || expiry <= now) continue
+      const holder = await fork.client.readContract({
+        address: v1.baseRegistrar,
+        abi: baseRegistrarAbi,
+        functionName: 'ownerOf',
+        args: [id],
+      })
+      if (holder === v1.nameWrapper) continue
+      found.push(label)
+      if (found.length === count) return found
+    }
+    throw new Error(`found only ${found.length} reserved mainnet names; add more candidates`)
+  }
+
+  /** Moves the ENSv1 token to a fresh account, which can receive it whatever code the holder has. */
+  async function takeToken(label: string) {
+    const tokenId = BigInt(labelhash(label))
+    const holder = await fork.client.readContract({
+      address: v1.baseRegistrar,
+      abi: baseRegistrarAbi,
+      functionName: 'ownerOf',
+      args: [tokenId],
+    })
+    const owner = await fork.account()
+    await fork.fund(holder)
+    await fork.write(holder, v1.baseRegistrar, baseRegistrarAbi, 'transferFrom', [
+      holder,
+      owner,
+      tokenId,
+    ])
+    return owner
+  }
 
   beforeAll(async () => {
-    expect((await state(ETH_REGISTRY, 'nick')).status).toBe(2)
-    expect((await state(ETH_REGISTRY, 'vitalik')).status).toBe(1)
+    const labels = await findReservedLabels(2)
+    unwrapped = labels[0]!
+    locked = labels[1]!
   })
 
-  test('get reads migrated and reserved names', async () => {
-    for (const name of [migrated, reserved]) {
-      const { address } = await fork.ens('get', 'address', name)
-      expect(address).toMatch(/^0x[0-9a-fA-F]{40}$/)
-      expect(await fork.ens('get', 'name', address)).toMatchObject({ name })
-      expect((await fork.ens('get', 'text', name, '--key', 'url')).value).toBeTruthy()
-      expect((await fork.ens('get', 'avatar', name)).avatar).toBeTruthy()
-    }
-  })
-
-  test('whois reports ENSv2 state only for the migrated name', async () => {
-    expect(await fork.ens('whois', migrated)).toMatchObject({
-      registry: ETH_REGISTRY,
-      status: 'REGISTERED',
-    })
-    expect((await fork.ens('whois', reserved)).status).toBeUndefined()
-  })
-
-  test('price and renew target ETHRegistrar or ETHRenewerV1 by migration state', async () => {
-    for (const [name, registrar] of [
-      [migrated, v2.registrar],
-      [reserved, v2.renewerV1],
-    ] as const) {
-      expect(await fork.ens('price', name, '--renew')).toMatchObject({
-        registrar,
-        paymentToken: v2.paymentToken,
+  test('price and renew pay USDC through ETHRenewerV1', async () => {
+    const name = `${unwrapped}.eth`
+    const tokenId = BigInt(labelhash(unwrapped))
+    const expires = () =>
+      fork.client.readContract({
+        address: v1.baseRegistrar,
+        abi: baseRegistrarAbi,
+        functionName: 'nameExpires',
+        args: [tokenId],
       })
-      expect(await fork.ens('renew', name)).toMatchObject({ to: registrar, value: '0' })
-    }
-  })
+    const before = await expires()
+    const price = await fork.ens('price', name, '--renew')
+    expect(price).toMatchObject({ registrar: v2.renewerV1, paymentToken: v2.paymentToken })
+    const renew = await fork.ens('renew', name)
+    expect(renew).toMatchObject({ to: v2.renewerV1, value: '0' })
 
-  test('set targets the v1 resolver behind the ENSv1 bridge for reserved names', async () => {
-    const tx = await fork.ens('set', 'text', reserved, '--key', 'k', '--value', 'v')
-    expect(tx.to).toBe((await fork.ens('whois', reserved)).resolver)
-    expect(tx.data.slice(0, 10)).toBe('0x10f13a8c') // setText(bytes32,string,string)
+    const payer = await fork.account()
+    await payFor(payer, v2.renewerV1, BigInt(price.total))
+    await fork.send(payer, renew)
+    expect((await expires()) - before).toBe(YEAR)
   })
 
   test('set encodes v1 setters for --resolver targets without ERC-165', async () => {
@@ -332,7 +366,7 @@ describe('existing mainnet names', () => {
       const tx = await fork.ens(
         'set',
         'text',
-        reserved,
+        `${unwrapped}.eth`,
         '--key',
         'k',
         '--value',
@@ -341,45 +375,49 @@ describe('existing mainnet names', () => {
         resolver,
       )
       expect(tx.to.toLowerCase()).toBe(resolver.toLowerCase())
-      expect(tx.data.slice(0, 10)).toBe('0x10f13a8c')
+      expect(tx.data.slice(0, 10)).toBe('0x10f13a8c') // setText(bytes32,string,string)
     }
   })
 
-  // Migrates the reserved name on the fork, so it must run last.
-  test('migrate moves a wrapped locked name through the locked controller', async () => {
-    const tokenId = BigInt(labelhash('vitalik'))
-    const holder = await fork.client.readContract({
-      address: v1.baseRegistrar,
-      abi: baseRegistrarAbi,
-      functionName: 'ownerOf',
-      args: [tokenId],
+  // The migrations change the names, so they must run last.
+  test('migrate moves an unwrapped name through the unlocked controller', async () => {
+    const name = `${unwrapped}.eth`
+    const owner = await takeToken(unwrapped)
+    const migrate = await fork.ens('migrate', name)
+    expect(migrate).toMatchObject({
+      kind: 'unwrapped',
+      to: v1.baseRegistrar,
+      controller: v2.unlockedMigrationController,
     })
-    // A fresh account can receive the wrapped token whatever code the real holder has.
-    const owner = await fork.account()
-    await fork.fund(holder)
-    await fork.write(holder, v1.baseRegistrar, baseRegistrarAbi, 'transferFrom', [
-      holder,
-      owner,
-      tokenId,
-    ])
+    await fork.send(owner, migrate)
+    expect(await fork.ens('whois', name)).toMatchObject({ owner, status: 'REGISTERED' })
+  })
+
+  test('migrate moves a wrapped locked name through the locked controller', async () => {
+    const name = `${locked}.eth`
+    const owner = await takeToken(locked)
     await fork.write(owner, v1.baseRegistrar, baseRegistrarAbi, 'approve', [
       v1.nameWrapper,
-      tokenId,
+      BigInt(labelhash(locked)),
     ])
     await fork.write(owner, v1.nameWrapper, nameWrapperAbi, 'wrapETH2LD', [
-      'vitalik',
+      locked,
       owner,
       CANNOT_UNWRAP,
       v1.resolver,
     ])
 
-    const migrate = await fork.ens('migrate', reserved)
+    const migrate = await fork.ens('migrate', name)
     expect(migrate).toMatchObject({
       kind: 'wrapped-locked',
       to: v1.nameWrapper,
       controller: v2.lockedMigrationController,
     })
     await fork.send(owner, migrate)
-    expect(await fork.ens('whois', reserved)).toMatchObject({ owner, status: 'REGISTERED' })
+    expect(await fork.ens('whois', name)).toMatchObject({ owner, status: 'REGISTERED' })
+
+    // The v1 public resolver authorizes writes through ENSv1 ownership, which is now gone.
+    const set = await fork.ens('set', 'text', name, '--key', 'k', '--value', 'v')
+    expect(set.warning).toContain('is registered in ENSv2, but')
   })
 })

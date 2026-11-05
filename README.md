@@ -327,8 +327,7 @@ ETH_RPC_URL=http://localhost:8545 bun src/index.ts available myname.eth
 `bun run test` runs the CLI against local [anvil](https://getfoundry.sh) forks of Sepolia and mainnet. Each test generates calldata with the real CLI, sends it from an impersonated account, and checks the resulting onchain state. Foundry must be installed. The forks use public RPCs by default; set `SEPOLIA_RPC_URL` or `MAINNET_RPC_URL` to use your own.
 
 - `e2e/sepolia.test.ts` covers ENSv2 registration, records, primary names, renewals, subregistries, and subnames, plus ENSv1 names reserved in ENSv2: renewal through `ETHRenewerV1`, v1 resolver and subname routing, and all three migration paths.
-- `e2e/mainnet.test.ts` covers the live mainnet ENSv2 deployment: registration paid in USDC, records, primary names, renewals, subregistries, and subnames, plus reads, renewals and record routing for migrated and reserved names, a wrapped locked migration, and errors for transactions that would revert.
-- `e2e/gregskril.test.ts` walks every command on both chains as the real holders of `gregskril.eth`, a reserved ENSv1 name (unwrapped on mainnet, wrapped on Sepolia): v1 records and routing, renewal through `ETHRenewerV1`, migration to a fresh owner with the default resolver, then ENSv2 records, renewal, subregistries, subnames, and registration.
+- `e2e/mainnet.test.ts` covers the live mainnet ENSv2 deployment: registration paid in USDC, records, primary names, renewals, subregistries, and subnames, plus renewal of reserved names through `ETHRenewerV1`, unwrapped and wrapped locked migrations, and errors for transactions that would revert.
 
 ### Command design conventions
 
