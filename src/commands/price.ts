@@ -1,12 +1,7 @@
 import { Cli, z } from 'incur'
 import { formatEther, formatUnits, getAddress } from 'viem/utils'
 import { erc20Abi } from 'viem'
-import {
-  ethRegistrarAbi,
-  ethRegistrarControllerAbi,
-  ethRenewerAbi,
-  addresses,
-} from '../lib/contracts.ts'
+import { ethRegistrarControllerAbi, addresses } from '../lib/contracts.ts'
 import {
   globalOptions,
   globalEnv,
@@ -15,6 +10,7 @@ import {
   renewalTarget,
 } from '../lib/context.ts'
 import { extractLabel, durationFromOption } from '../lib/utils.ts'
+import { getRegisterPrice, getRenewPrice } from '../lib/v2.ts'
 
 export const priceCommand = Cli.create('price', {
   description: 'Check the registration or renewal cost for an ENS name.',
@@ -47,19 +43,15 @@ export const priceCommand = Cli.create('price', {
       const registrar = renewal?.address ?? v2Deployment.registrar
       const [base, premium] = renewal
         ? ([
-            await client.readContract({
-              address: registrar,
-              abi: ethRenewerAbi,
-              functionName: 'getRenewPrice',
-              args: [label, duration, paymentToken],
-            }),
+            await getRenewPrice({ client, renewer: registrar, label, duration, paymentToken }),
             0n,
           ] as const)
-        : await client.readContract({
-            address: v2Deployment.registrar,
-            abi: ethRegistrarAbi,
-            functionName: 'getRegisterPrice',
-            args: [label, duration, paymentToken],
+        : await getRegisterPrice({
+            client,
+            registrar: v2Deployment.registrar,
+            label,
+            duration,
+            paymentToken,
           })
       const total = base + premium
 

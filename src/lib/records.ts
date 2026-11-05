@@ -6,10 +6,17 @@ import {
   AbiDecodingDataSizeTooSmallError,
   type PublicClient,
 } from 'viem'
-import { encodeFunctionData, getAddress, isHex, toHex, toFunctionSelector } from 'viem/utils'
+import {
+  encodeFunctionData,
+  getAddress,
+  isAddress,
+  isHex,
+  toHex,
+  toFunctionSelector,
+} from 'viem/utils'
 import { packetToBytes } from 'viem/ens'
 import { permissionedResolverAbi, publicResolverAbi } from './contracts.ts'
-import { resolveCoinType } from './cointype.ts'
+import { isEvmCoinType, resolveCoinType } from './cointype.ts'
 import { asHex } from './utils.ts'
 
 // IAddressSetter is advertised by the new record resolver. Detect the resolver,
@@ -68,6 +75,13 @@ export function parseRecordOperations(input: string): RecordOperation[] {
   return z.array(recordOperationSchema).parse(JSON.parse(input))
 }
 
+/** EVM coin types take a valid address; others take raw bytes. Empty bytes clear the record. */
+function addressRecordValue(address: string, coinType: number | undefined): `0x${string}` {
+  if (address === '0x' || !isEvmCoinType(coinType)) return asHex(address, 'address')
+  if (!isAddress(address)) throw new Error(`Invalid EVM address: "${address}"`)
+  return getAddress(address)
+}
+
 export function encodeRecordOperation(
   node: `0x${string}`,
   operation: RecordOperation,
@@ -79,13 +93,13 @@ export function encodeRecordOperation(
         return encodeFunctionData({
           abi: publicResolverAbi,
           functionName: 'setAddr',
-          args: [node, BigInt(coinType), asHex(operation.address, 'address')],
+          args: [node, BigInt(coinType), addressRecordValue(operation.address, coinType)],
         })
       }
       return encodeFunctionData({
         abi: publicResolverAbi,
         functionName: 'setAddr',
-        args: [node, getAddress(operation.address)],
+        args: [node, getAddress(addressRecordValue(operation.address, coinType))],
       })
     }
     case 'text':
@@ -108,15 +122,10 @@ export function encodeV2RecordOperation(name: string, operation: RecordOperation
   switch (operation.type) {
     case 'address': {
       const coinType = resolveCoinType(operation) ?? 60
-      // Empty bytes clear the record; otherwise ETH addresses are checksummed.
-      const address =
-        coinType === 60 && operation.address !== '0x'
-          ? getAddress(operation.address)
-          : asHex(operation.address, 'address')
       return encodeFunctionData({
         abi: permissionedResolverAbi,
         functionName: 'setAddress',
-        args: [dnsName, BigInt(coinType), address],
+        args: [dnsName, BigInt(coinType), addressRecordValue(operation.address, coinType)],
       })
     }
     case 'text':

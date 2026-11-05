@@ -8,7 +8,7 @@ import {
   clientFromContext,
   universalResolverParam,
 } from '../lib/context.ts'
-import { coinTypeOptions, resolveCoinType } from '../lib/cointype.ts'
+import { coinTypeOptions, formatResolvedAddress, resolveCoinType } from '../lib/cointype.ts'
 
 const resolveOptions = coinTypeOptions.merge(globalOptions)
 
@@ -34,7 +34,7 @@ export const getCommands = Cli.create('get', {
 
       return {
         name,
-        address,
+        address: formatResolvedAddress(address, coinType),
         ...(coinType != null ? { coinType } : {}),
       }
     },

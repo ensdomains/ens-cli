@@ -12,7 +12,8 @@ import {
   toHex,
 } from 'viem/utils'
 import { labelhash, namehash } from 'viem/ens'
-import { v2RegistryAbi, verifiableFactoryAbi } from './contracts.ts'
+import { ethRegistrarAbi, ethRenewerAbi, v2RegistryAbi, verifiableFactoryAbi } from './contracts.ts'
+import { isUnsupportedCall } from './records.ts'
 
 // Mirrors IPermissionedRegistry.Status in contracts-v2.
 export enum V2Status {
@@ -20,6 +21,55 @@ export enum V2Status {
   RESERVED,
   REGISTERED,
 }
+
+/** Quotes a registration. The registrar reverts on names, durations, and tokens it would reject. */
+export async function getRegisterPrice(opts: {
+  client: PublicClient
+  registrar: `0x${string}`
+  label: string
+  duration: bigint
+  paymentToken: `0x${string}`
+}) {
+  const { client, registrar, label, duration, paymentToken } = opts
+  try {
+    return await client.readContract({
+      address: registrar,
+      abi: ethRegistrarAbi,
+      functionName: 'getRegisterPrice',
+      args: [label, duration, paymentToken],
+    })
+  } catch (error) {
+    if (!isUnsupportedCall(error)) throw error
+    throw new Error(
+      `Cannot register "${label}.eth" for ${duration} seconds with payment token ${paymentToken}. The name may be taken or reserved, the duration too short, or the token unsupported.`,
+    )
+  }
+}
+
+/** Quotes a renewal. The registrar and renewer revert on names, durations, and tokens they would reject. */
+export async function getRenewPrice(opts: {
+  client: PublicClient
+  renewer: `0x${string}`
+  label: string
+  duration: bigint
+  paymentToken: `0x${string}`
+}) {
+  const { client, renewer, label, duration, paymentToken } = opts
+  try {
+    return await client.readContract({
+      address: renewer,
+      abi: ethRenewerAbi,
+      functionName: 'getRenewPrice',
+      args: [label, duration, paymentToken],
+    })
+  } catch (error) {
+    if (!isUnsupportedCall(error)) throw error
+    throw new Error(
+      `Cannot renew "${label}.eth" for ${duration} seconds with payment token ${paymentToken}. The name may be unregistered or past its grace period, the duration too short, or the token unsupported.`,
+    )
+  }
+}
+
 export const ROLE_REGISTRAR = 1n << 0n
 export const ROLE_REGISTER_RESERVED = 1n << 4n
 export const ROLE_SET_PARENT = 1n << 8n

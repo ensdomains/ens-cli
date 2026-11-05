@@ -1,8 +1,8 @@
 import { Cli, z } from 'incur'
 import { zeroAddress } from 'viem'
-import { encodeFunctionData, getAddress, toHex } from 'viem/utils'
+import { encodeFunctionData, getAddress, parseAbi, toHex } from 'viem/utils'
 import { getEnsResolver, namehash, packetToBytes } from 'viem/ens'
-import { validateName } from '../lib/utils.ts'
+import { eth2ldLabel, validateName } from '../lib/utils.ts'
 import {
   addresses,
   compositeResolverAbi,
@@ -14,9 +14,11 @@ import {
   globalOptions,
   globalEnv,
   clientFromContext,
+  isV2Active,
   universalResolverParam,
   type Context,
 } from '../lib/context.ts'
+import { V2Status } from '../lib/v2.ts'
 import { coinTypeOptions, resolveCoinType } from '../lib/cointype.ts'
 import {
   encodeRecordOperation,
@@ -32,6 +34,7 @@ type SetContext = Context & { options: { resolver?: string } }
 const RESOLVER_SELECTION_HINT =
   "By default, the generated transaction targets the name's current resolver. Use --resolver to override it."
 const REVERSE_NAMESPACE = 'addr.reverse'
+const rootRegistryAbi = parseAbi(['function ROOT_REGISTRY() view returns (address)'])
 
 async function resolveTargetResolver(c: SetContext, name: string): Promise<`0x${string}`> {
   if (c.options.resolver) return getAddress(c.options.resolver)
@@ -74,11 +77,39 @@ async function resolveTargetResolver(c: SetContext, name: string): Promise<`0x${
   return resolver
 }
 
-async function recordEncoder(c: SetContext, name: string, resolver: `0x${string}`) {
+/** Resolves the target resolver and its record encoding, with a warning when writes may revert. */
+async function recordTarget(c: SetContext, name: string) {
   const { client } = clientFromContext(c)
+  const resolver = await resolveTargetResolver(c, name)
   const v2 = await supportsV2RecordSetters(client, resolver)
-  return (operation: RecordOperation) =>
+  const encode = (operation: RecordOperation) =>
     v2 ? encodeV2RecordOperation(name, operation) : encodeRecordOperation(namehash(name), operation)
+  const warning = v2 ? undefined : await v1ResolverWarning(c, name, resolver)
+  return { resolver, encode, ...(warning ? { warning } : {}) }
+}
+
+/**
+ * The ENSv1 Public Resolver authorizes writes through ENSv1 registry ownership, which migration
+ * gives up, so its records are read-only once the name is registered in ENSv2. Custom resolvers
+ * may authorize writes some other way, so this can't be stated outright.
+ */
+async function v1ResolverWarning(c: SetContext, name: string, resolver: `0x${string}`) {
+  if (eth2ldLabel(name) == null) return undefined
+  const { client, chain } = clientFromContext(c)
+  // PublicResolverV2 keeps the namehash setters but authorizes through the ENSv2 registry.
+  try {
+    await client.readContract({
+      address: resolver,
+      abi: rootRegistryAbi,
+      functionName: 'ROOT_REGISTRY',
+    })
+    return undefined
+  } catch (error) {
+    if (!isUnsupportedCall(error)) throw error
+  }
+  const v2 = await isV2Active(c, name)
+  if (!v2.isV2 || v2.nameState.status !== V2Status.REGISTERED) return undefined
+  return `"${name}" is registered in ENSv2, but ${resolver} lacks ENSv2 record setters. If it authorizes updates through ENSv1 registry ownership, as the ENSv1 Public Resolver does, this transaction will revert. To replace it, deploy an OwnedResolver with "ens resolver deploy <owner> --name ${name} --records <json> --chain ${chain}", then point the name at it with "ens resolver set ${name} --resolver <address> --chain ${chain}".`
 }
 
 async function resolveReverseRegistrar(c: Context): Promise<`0x${string}`> {
@@ -169,11 +200,10 @@ export const setCommands = Cli.create('set', {
     ],
     async run(c) {
       const name = validateName(c.args.name)
-      const resolverAddress = await resolveTargetResolver(c, name)
       const coinType = resolveCoinType(c.options)
-      const encode = await recordEncoder(c, name, resolverAddress)
+      const { resolver, encode, ...warning } = await recordTarget(c, name)
       const data = encode({ type: 'address', address: c.options.address, coinType })
-      return { to: resolverAddress, data, value: '0' }
+      return { to: resolver, data, value: '0', ...warning }
     },
   })
   .command('text', {
@@ -198,10 +228,9 @@ export const setCommands = Cli.create('set', {
     ],
     async run(c) {
       const name = validateName(c.args.name)
-      const resolverAddress = await resolveTargetResolver(c, name)
-      const encode = await recordEncoder(c, name, resolverAddress)
+      const { resolver, encode, ...warning } = await recordTarget(c, name)
       const data = encode({ type: 'text', key: c.options.key, value: c.options.value })
-      return { to: resolverAddress, data, value: '0' }
+      return { to: resolver, data, value: '0', ...warning }
     },
   })
   .command('contenthash', {
@@ -227,10 +256,9 @@ export const setCommands = Cli.create('set', {
     ],
     async run(c) {
       const name = validateName(c.args.name)
-      const resolverAddress = await resolveTargetResolver(c, name)
-      const encode = await recordEncoder(c, name, resolverAddress)
+      const { resolver, encode, ...warning } = await recordTarget(c, name)
       const data = encode({ type: 'contenthash', hash: c.options.hash })
-      return { to: resolverAddress, data, value: '0' }
+      return { to: resolver, data, value: '0', ...warning }
     },
   })
   .command('batch', {
@@ -256,9 +284,8 @@ export const setCommands = Cli.create('set', {
     ],
     async run(c) {
       const name = validateName(c.args.name)
-      const resolverAddress = await resolveTargetResolver(c, name)
       const operations = parseRecordOperations(c.options.data)
-      const encode = await recordEncoder(c, name, resolverAddress)
+      const { resolver, encode, ...warning } = await recordTarget(c, name)
       const calls = operations.map(encode)
 
       const data = encodeFunctionData({
@@ -267,6 +294,6 @@ export const setCommands = Cli.create('set', {
         args: [calls],
       })
 
-      return { to: resolverAddress, data, value: '0' }
+      return { to: resolver, data, value: '0', ...warning }
     },
   })

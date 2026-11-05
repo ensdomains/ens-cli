@@ -5,7 +5,7 @@ const FEEDBACK_API_URL = 'https://ens-cli-feedback.ens-cf.workers.dev'
 export const feedbackCommand = Cli.create('feedback', {
   description: 'Send feedback about the ENS CLI to the maintainers',
   args: z.object({
-    message: z.string().min(1).describe('Feedback text to send'),
+    message: z.string().trim().min(1).describe('Feedback text to send'),
   }),
   options: z.object({
     name: z.string().optional().describe('Your name'),

@@ -1,4 +1,5 @@
-import { isHex } from 'viem/utils'
+import { zeroAddress } from 'viem'
+import { getAddress, isHex } from 'viem/utils'
 import { normalize } from 'viem/ens'
 
 export const ONE_YEAR = 31536000n
@@ -37,7 +38,7 @@ export function extractLabel(name: string): string {
   const normalized = validateName(name)
   const label = eth2ldLabel(normalized)
   if (label == null) {
-    throw new Error(`Registration only supports 2LDs (e.g. name.eth). Got: ${normalized}`)
+    throw new Error(`Only 2LD .eth names are supported here (e.g. name.eth). Got: ${normalized}`)
   }
   if (label.length < 3) {
     throw new Error(
@@ -52,6 +53,12 @@ export function asHex(value: string, field: string): `0x${string}` {
     throw new Error(`Invalid ${field}: expected 0x-prefixed hex, got "${value}"`)
   }
   return value
+}
+
+export function ownerFromOption(value: string): `0x${string}` {
+  const owner = getAddress(value)
+  if (owner === zeroAddress) throw new Error('owner cannot be the zero address')
+  return owner
 }
 
 export function durationFromOption(duration: number | undefined): bigint {

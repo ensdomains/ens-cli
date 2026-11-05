@@ -42,7 +42,8 @@ npx "https://pkg.pr.new/ensdomains/ens-cli/@ensdomains/cli@main"
 ```sh
 # Forward resolve a name to an address
 ens get address vitalik.eth
-ens get address vitalik.eth --coin-type 0  # BTC address
+ens get address vitalik.eth --coin-type 0  # BTC record, as raw hex (scriptPubKey)
+ens get address vitalik.eth --chain-id 10  # Optimism address (EVM addresses are checksummed)
 
 # Reverse resolve an address to a name
 ens get name 0xd8dA6BF26964aF9D7eEd9e03E53415D37aA96045
@@ -83,14 +84,13 @@ ens register commit myname.eth --owner 0xYourAddress --json
 ens register reveal myname.eth \
   --owner 0xYourAddress \
   --secret 0x... \
-  --value 2307947853431408 \
   --json
 # Returns: { to, data, value }
 ```
 
-Options for both commands: `--duration` (seconds, default 1 year) and `--resolver`. `--reverse-record` is ENSv1-only; it does not deploy or select an ENSv2 resolver and does not create forward resolution. After ENSv2 registration, use `ens set name <name>` to set the owner's reverse record separately.
+Options for both commands: `--duration` (seconds, default 1 year), `--resolver`, `--subregistry`, `--paymentToken`, and `--referrer`; use the same values for commit and reveal. On ENSv2, registration is paid in the ERC-20 token shown by `ens price`, so a nonzero `--value` is rejected, and both commands check the name, duration, and token with the registrar first. ENSv1 reveal requires `--value` with the freshly fetched `bufferedTotal`. `--reverse-record` is ENSv1-only; it does not deploy or select an ENSv2 resolver and does not create forward resolution. After ENSv2 registration, use `ens set name <name>` to set the owner's reverse record separately.
 
-On ENSv2 (Sepolia), `--resolver` defaults to the owner's deployed permissioned resolver when the canonical owned resolver already exists; otherwise it falls back to the zero address, registering a name with no resolver. Do not broadcast a zero-resolver commitment unless that is intentional. Generate `ens resolver deploy` first (see below), optionally initialize the name's address/text records in that deployment, and pass its predicted `resolver` address explicitly to both commit and reveal. The predicted address can be committed before its deployment transaction is broadcast, so the resolver can be deployed during the commitment wait.
+On ENSv2, `--resolver` defaults to the owner's deployed permissioned resolver when the canonical owned resolver already exists; otherwise it falls back to the zero address, registering a name with no resolver. Do not broadcast a zero-resolver commitment unless that is intentional. Generate `ens resolver deploy` first (see below), optionally initialize the name's address/text records in that deployment, and pass its predicted `resolver` address explicitly to both commit and reveal. The predicted address can be committed before its deployment transaction is broadcast, so the resolver can be deployed during the commitment wait.
 
 ### Resolver management
 
@@ -139,7 +139,7 @@ The resolver address is derived from `(factory, proxyLogic, deployer, salt)`, so
 
 `--name` and `--records` must be used together. On a new resolver, the address, text, and contenthash operations use `PermissionedResolver.initialize(grants, calls)` to initialize records in the deployment transaction, avoiding a later `ens set batch` transaction. If the resolver is already deployed, use `ens set batch` instead. The predicted resolver address can be used in a registration commitment before deployment, so deployment and record initialization can happen during the commitment waiting period.
 
-Sepolia targets the [October 1, 2026 contracts-v2 deployment](https://github.com/ensdomains/contracts-v2/tree/07e55a05/contracts/deployments/sepolia). Mainnet ENSv2 addresses are configured from the [October 18, 2026 deployment](https://github.com/ensdomains/contracts-v2/tree/deploy/mainnet-v2-20261002/contracts/deployments/mainnet), but, as on Sepolia, the CLI only uses them once the Universal Resolver reports ENSv2. `PermissionedResolver` setters take DNS-encoded names (`setAddress`, `setText`, `setContenthash`); `PublicResolverV2` retains the v1 namehash-based setters despite using v2 ownership. The `set` commands detect the target resolver's interface, including when `--resolver` is supplied. Subregistry and resolver initializers grant roles through arrays of `(account, roleBitmap)` entries.
+Sepolia targets the [October 1, 2026 contracts-v2 deployment](https://github.com/ensdomains/contracts-v2/tree/07e55a05/contracts/deployments/sepolia). Mainnet targets the [October 26, 2026 deployment](https://github.com/ensdomains/contracts-v2/tree/deploy/mainnet-v2-20261002/contracts/deployments/mainnet), which the mainnet Universal Resolver now reports as active. On both chains the CLI only uses the ENSv2 addresses once the Universal Resolver reports ENSv2. `PermissionedResolver` setters take DNS-encoded names (`setAddress`, `setText`, `setContenthash`); `PublicResolverV2` retains the v1 namehash-based setters despite using v2 ownership. The `set` commands detect the target resolver's interface, including when `--resolver` is supplied. When a `.eth` 2LD is registered in ENSv2 but the target resolver has no ENSv2 setters and no `ROOT_REGISTRY()` (which tells it apart from `PublicResolverV2`), the output includes a `warning`: if the resolver authorizes through ENSv1 registry ownership, as the ENSv1 Public Resolver does, the transaction will revert, because migration gives that ownership up. Subregistry and resolver initializers grant roles through arrays of `(account, roleBitmap)` entries.
 
 The CLI discovers the `.eth` registry through the selected Universal Resolver's `ROOT_REGISTRY()` and `getSubregistry("eth")`, and checks it against the configured registrar's `ETH_REGISTRY()`. Resolver address prediction reads `proxyLogic()` from the factory. Registrar, renewer, factory, migration controller, implementation, and default payment token addresses remain deployment configuration.
 
@@ -173,7 +173,7 @@ ens price myname.eth --renew --chain sepolia
 ens renew myname.eth --chain sepolia --json
 ```
 
-On an active ENSv2 deployment, renewal targets `ETHRegistrar` for v2 names and `ETHRenewerV1` for reserved, unmigrated v1 names, including expired reservations in grace. Both use `renew((label, duration, referrer), paymentToken)`. Use the same `--payment-token` and `--duration` for pricing and renewal. ENSv2 renewal sends zero ETH; a nonzero `--value` is rejected. On ENSv1, `--value` remains required and should be the freshly fetched `bufferedTotal`. Renewal quotes exclude the registration premium.
+On an active ENSv2 deployment, renewal targets `ETHRegistrar` for v2 names and `ETHRenewerV1` for reserved, unmigrated v1 names, including expired reservations in grace. Both use `renew((label, duration, referrer), paymentToken)`. Use the same `--payment-token` and `--duration` for pricing and renewal. ENSv2 renewal sends zero ETH; a nonzero `--value` is rejected. `renew` and `price --renew` return an error when the contract would refuse the renewal, such as for an unregistered name or an unsupported token. On ENSv1, `--value` remains required and should be the freshly fetched `bufferedTotal`. Renewal quotes exclude the registration premium.
 
 ### Migrating from ENSv1 to ENSv2
 
@@ -193,7 +193,7 @@ ens migrate myname.eth \
 
 The transaction must be sent by the current ENSv1 token owner or an approved operator. Unwrapped names transfer the Base Registrar ERC-721 to the unlocked controller. Wrapped names transfer the NameWrapper ERC-1155 to either the unlocked or locked controller based on `CANNOT_UNWRAP`. Locked migration deploys its own `WrapperRegistry`, so `--subregistry` is ignored in that case.
 
-Unless `--resolver` is provided, migration uses the new owner's canonical OwnedResolver when it is already deployed. Otherwise it preserves the current ENSv1 resolver for record continuity and returns a flag recommending that an OwnedResolver be deployed before regenerating the migration. Locked names with `CANNOT_SET_RESOLVER` are excluded because their resolver payload is ignored.
+Unless `--resolver` is provided, migration uses the new owner's canonical OwnedResolver when it is already deployed. Otherwise it preserves the current ENSv1 resolver for record continuity and returns a flag recommending that an OwnedResolver be deployed before regenerating the migration. When that resolver lacks ENSv2 record setters, the flag is a warning: if it authorizes updates through ENSv1 registry ownership, as the ENSv1 Public Resolver does, its records keep resolving after migration but can no longer be changed until `ens resolver set` points the name at a new resolver. Deploy the OwnedResolver with `--name` and `--records` to carry records over. Locked names with `CANNOT_SET_RESOLVER` are excluded because their resolver payload is ignored.
 
 Wrapped-name flags also describe how the command inferred the migration path, the sender authorization it assumes, and any fuse-dependent behavior to review before broadcasting. For example, `CANNOT_APPROVE` with a frozen token approval is expected to revert.
 
@@ -327,7 +327,7 @@ ETH_RPC_URL=http://localhost:8545 bun src/index.ts available myname.eth
 `bun run test` runs the CLI against local [anvil](https://getfoundry.sh) forks of Sepolia and mainnet. Each test generates calldata with the real CLI, sends it from an impersonated account, and checks the resulting onchain state. Foundry must be installed. The forks use public RPCs by default; set `SEPOLIA_RPC_URL` or `MAINNET_RPC_URL` to use your own.
 
 - `e2e/sepolia.test.ts` covers ENSv2 registration, records, primary names, renewals, subregistries, and subnames, plus ENSv1 names reserved in ENSv2: renewal through `ETHRenewerV1`, v1 resolver and subname routing, and all three migration paths.
-- `e2e/mainnet.test.ts` covers ENSv1 before the cutover and simulates the mainnet ENSv2 cutover with `--universal-resolver`.
+- `e2e/mainnet.test.ts` covers the live mainnet ENSv2 deployment: registration paid in USDC, records, primary names, renewals, subregistries, and subnames, plus renewal of reserved names through `ETHRenewerV1`, unwrapped and wrapped locked migrations, and errors for transactions that would revert.
 
 ### Command design conventions
 

@@ -10,6 +10,7 @@ import {
   v2RegistryAbi,
 } from '../lib/contracts.ts'
 import { activeV2Deployment, clientFromContext, globalEnv, globalOptions } from '../lib/context.ts'
+import { supportsV2RecordSetters } from '../lib/records.ts'
 import { eth2ldLabel, validateName } from '../lib/utils.ts'
 import { V2Status, resolveDeployedOwnedResolver } from '../lib/v2.ts'
 
@@ -218,8 +219,14 @@ export const migrateCommand = Cli.create('migrate', {
       !resolverPayloadIgnored &&
       isAddressEqual(ownedResolver, zeroAddress)
     ) {
+      const deployHint = `run "ens resolver deploy ${owner} --name ${name} --records <json> --chain ${chain}" and regenerate this migration with --resolver <address>`
+      // The ENSv1 Public Resolver authorizes writes through ENSv1 registry ownership, which migration
+      // gives up. Custom resolvers may authorize writes some other way, so this can't be stated outright.
       flags.push(
-        `Recommendation: no canonical OwnedResolver is deployed for ${owner}, so the current ENSv1 resolver is being reused. Verify it authorizes the ENSv2 owner to update records, or run "ens resolver deploy ${owner} --chain ${chain}" and regenerate this migration with --resolver <address>.`,
+        isAddressEqual(currentResolver, zeroAddress) ||
+          (await supportsV2RecordSetters(client, currentResolver))
+          ? `Recommendation: no canonical OwnedResolver is deployed for ${owner}, so the current ENSv1 resolver is being reused. Verify it authorizes the ENSv2 owner to update records, or ${deployHint}.`
+          : `Warning: no canonical OwnedResolver is deployed for ${owner}, so the current ENSv1 resolver ${currentResolver} is being reused. It lacks ENSv2 record setters. If it authorizes updates through ENSv1 registry ownership, as the ENSv1 Public Resolver does, migration gives that up: existing records keep resolving but can no longer be changed until the resolver is replaced. To keep records editable, ${deployHint}.`,
       )
     }
     if (wrapped) {

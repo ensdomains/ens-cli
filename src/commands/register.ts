@@ -3,8 +3,8 @@ import { zeroAddress, zeroHash } from 'viem'
 import { encodeFunctionData, getAddress, toHex } from 'viem/utils'
 import { ethRegistrarAbi, ethRegistrarControllerAbi, addresses } from '../lib/contracts.ts'
 import { globalOptions, globalEnv, clientFromContext, activeV2Deployment } from '../lib/context.ts'
-import { extractLabel, asHex, durationFromOption } from '../lib/utils.ts'
-import { resolveDeployedOwnedResolver } from '../lib/v2.ts'
+import { extractLabel, asHex, durationFromOption, ownerFromOption } from '../lib/utils.ts'
+import { getRegisterPrice, resolveDeployedOwnedResolver } from '../lib/v2.ts'
 
 function generateSecret(): `0x${string}` {
   const bytes = new Uint8Array(32)
@@ -88,7 +88,7 @@ export const registerCommands = Cli.create('register', {
     async run(c) {
       const { client, chain } = clientFromContext(c)
       const label = extractLabel(c.args.name)
-      const owner = getAddress(c.options.owner)
+      const owner = ownerFromOption(c.options.owner)
       const duration = durationFromOption(c.options.duration)
       const secret = c.options.secret ? asHex(c.options.secret, 'secret') : generateSecret()
       const v2Deployment = await activeV2Deployment(c)
@@ -106,6 +106,13 @@ export const registerCommands = Cli.create('register', {
           ? getAddress(c.options.paymentToken)
           : v2Deployment.paymentToken
         const referrer = c.options.referrer ? asHex(c.options.referrer, 'referrer') : zeroHash
+        await getRegisterPrice({
+          client,
+          registrar: v2Deployment.registrar,
+          label,
+          duration,
+          paymentToken,
+        })
 
         const commitment = await client.readContract({
           address: v2Deployment.registrar,
@@ -268,12 +275,15 @@ export const registerCommands = Cli.create('register', {
     async run(c) {
       const { client, chain } = clientFromContext(c)
       const label = extractLabel(c.args.name)
-      const owner = getAddress(c.options.owner)
+      const owner = ownerFromOption(c.options.owner)
       const duration = durationFromOption(c.options.duration)
       const secret = asHex(c.options.secret, 'secret')
       const v2Deployment = await activeV2Deployment(c)
 
       if (v2Deployment) {
+        if (c.options.value != null && BigInt(c.options.value) !== 0n) {
+          throw new Error('ENSv2 registrations use an ERC-20 payment token. Do not send ETH value.')
+        }
         const subregistry = c.options.subregistry ? getAddress(c.options.subregistry) : zeroAddress
         const resolver = c.options.resolver
           ? getAddress(c.options.resolver)
@@ -286,6 +296,13 @@ export const registerCommands = Cli.create('register', {
           ? getAddress(c.options.paymentToken)
           : v2Deployment.paymentToken
         const referrer = c.options.referrer ? asHex(c.options.referrer, 'referrer') : zeroHash
+        await getRegisterPrice({
+          client,
+          registrar: v2Deployment.registrar,
+          label,
+          duration,
+          paymentToken,
+        })
         const resolverHint =
           resolver === zeroAddress
             ? 'WARNING: This reveal registers the name with no resolver. The resolver must exactly match the commitment; if zero was unintentional, deploy/predict an OwnedResolver and make a new commitment with its address.'

@@ -435,8 +435,12 @@ async function findReservedNames(count: number): Promise<ReservedName[]> {
         args: [BigInt(labelhash(label))],
       }),
     ])
-    if (status !== 1 || v1Expiry <= now || (fuses & CANNOT_UNWRAP) !== 0) continue
-    if ((await fork.client.getCode({ address: owner })) !== undefined) continue
+    // Unwrapped names keep stale NameWrapper data with a zero owner.
+    if (owner === zeroAddress || status !== 1 || v1Expiry <= now || (fuses & CANNOT_UNWRAP) !== 0)
+      continue
+    // EIP-7702 delegated EOAs (0xef0100 || delegate) can still be impersonated.
+    const code = await fork.client.getCode({ address: owner })
+    if (code !== undefined && !code.startsWith('0xef0100')) continue
     await fork.fund(owner)
     found.push({ label, name, owner, v1Expiry })
     if (found.length === count) return found
