@@ -9,11 +9,14 @@ const defaultRpcs = {
 
 const chains = { mainnet, sepolia } as const
 
+// Concurrent reads (e.g. Promise.all) share one HTTP request as a JSON-RPC batch.
+const batched = (url: string) => http(url, { batch: true })
+
 export function createEnsClient({ rpc, chain = 'mainnet' }: { rpc?: string; chain?: Chain }) {
   // A user-supplied RPC is used exclusively: falling back to public RPCs could
   // silently build transactions from a different chain state (e.g. a local fork).
   return createPublicClient({
     chain: chains[chain],
-    transport: rpc ? http(rpc) : fallback(defaultRpcs[chain].map((url) => http(url))),
+    transport: rpc ? batched(rpc) : fallback(defaultRpcs[chain].map(batched)),
   })
 }

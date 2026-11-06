@@ -125,15 +125,24 @@ export async function startFork(opts: { chain: 'mainnet' | 'sepolia'; forkUrl: s
 
   /** Proxies the fork, answering requests that match `fail` with a JSON-RPC error. */
   function faultyRpc(fail: (body: string) => boolean, error: object = upstreamUnavailable) {
+    // `fail` sees one JSON-RPC request at a time, including each request in a batch.
+    async function answer(request: { id: unknown }) {
+      const body = JSON.stringify(request)
+      if (fail(body)) return { jsonrpc: '2.0', id: request.id, error }
+      const res = await fetch(rpc, {
+        method: 'POST',
+        body,
+        headers: { 'content-type': 'application/json' },
+      })
+      return res.json()
+    }
     const server = Bun.serve({
       port: 0,
       async fetch(req) {
-        const body = await req.text()
-        if (fail(body)) {
-          const { id } = JSON.parse(body)
-          return Response.json({ jsonrpc: '2.0', id, error })
-        }
-        return fetch(rpc, { method: 'POST', body, headers: { 'content-type': 'application/json' } })
+        const body = (await req.json()) as { id: unknown } | { id: unknown }[]
+        return Response.json(
+          Array.isArray(body) ? await Promise.all(body.map(answer)) : await answer(body),
+        )
       },
     })
     return { url: `http://127.0.0.1:${server.port}`, stop: () => server.stop(true) }
