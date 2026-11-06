@@ -1,5 +1,5 @@
 import { z } from 'incur'
-import { isAddressEqual, zeroAddress, type ContractFunctionReturnType } from 'viem'
+import { isAddressEqual, zeroAddress } from 'viem'
 import { labelhash } from 'viem/ens'
 import { createEnsClient } from './client.ts'
 import {
@@ -10,7 +10,7 @@ import {
   type Chain,
 } from './contracts.ts'
 import { eth2ldLabelForName } from './utils.ts'
-import { V2Status } from './v2.ts'
+import { V2Status, type V2RegistryState } from './v2.ts'
 
 export const globalOptions = z.object({
   rpc: z.string().optional().describe('Ethereum RPC URL'),
@@ -49,20 +49,18 @@ export function universalResolverAddress(c: Context, chain: Chain): `0x${string}
 
 // contracts-v2 INormalizedUniversalResolver includes isENSv2().
 const NORMALIZED_UNIVERSAL_RESOLVER_INTERFACE_ID = '0xfe0badd6'
-type V2RegistryState = ContractFunctionReturnType<typeof v2RegistryAbi, 'view', 'getState'>
-
 type V2Inactive = { readonly isV2: false }
 type V2Active = { readonly isV2: true; readonly ethRegistry: `0x${string}` }
 type V2NameActive = V2Active & { readonly nameState: V2RegistryState }
 
 /** The value of a settled read, rethrowing its error. */
-function settled<T>(result: PromiseSettledResult<T>): T {
+export function settled<T>(result: PromiseSettledResult<T>): T {
   if (result.status === 'rejected') throw result.reason
   return result.value
 }
 
-/** The selected Universal Resolver's ENSv2 .eth registry, or undefined when ENSv2 is not active. */
-async function v2EthRegistry(c: Context) {
+/** The selected Universal Resolver's ENSv2 root registry, or undefined when ENSv2 is not active. */
+export async function v2RootRegistry(c: Context) {
   const { client, chain } = clientFromContext(c)
   const resolver = universalResolverAddress(c, chain)
 
@@ -87,7 +85,14 @@ async function v2EthRegistry(c: Context) {
   if (!settled(supportsVersionCheck) || !settled(isV2)) return undefined
   const root = settled(rootRegistry)
   if (root === zeroAddress) throw new Error('ENSv2 Universal Resolver has no root registry')
+  return root
+}
 
+/** The selected Universal Resolver's ENSv2 .eth registry, or undefined when ENSv2 is not active. */
+async function v2EthRegistry(c: Context) {
+  const root = await v2RootRegistry(c)
+  if (!root) return undefined
+  const { client } = clientFromContext(c)
   const ethRegistry = await client.readContract({
     address: root,
     abi: v2RegistryAbi,

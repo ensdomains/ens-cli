@@ -377,11 +377,20 @@ describe('ENSv2 name lifecycle', () => {
       await fork.send(subOwner, set)
     })
 
-    test('resolver set and whois reject ENSv2 subnames', async () => {
+    test('resolver set rejects ENSv2 subnames', async () => {
       await expect(fork.ens('resolver', 'set', sub, '--resolver', resolver)).rejects.toThrow(
         'only supports 2LD .eth names',
       )
-      await expect(fork.ens('whois', sub)).rejects.toThrow('only supports 2LD .eth names')
+    })
+
+    test('whois reads ENSv2 subnames from the parent subregistry', async () => {
+      expect(await fork.ens('whois', sub)).toMatchObject({
+        kind: 'v2',
+        owner: subOwner,
+        resolver,
+        registry: subregistry,
+        status: 'REGISTERED',
+      })
     })
   })
 })
@@ -488,7 +497,8 @@ describe('ENSv1 names reserved in ENSv2', () => {
   test('available, whois and price treat reserved names as v1 names', async () => {
     expect(await fork.ens('available', wrapped.name)).toMatchObject({ available: false })
     expect(await fork.ens('whois', wrapped.name)).toMatchObject({
-      owner: addresses.sepolia.nameWrapper,
+      kind: 'v1',
+      owner: wrapped.owner,
     })
     expect(await fork.ens('whois', unwrapped.name)).toMatchObject({ owner: unwrapped.owner })
     expect(await fork.ens('price', wrapped.name, '--renew')).toMatchObject({
