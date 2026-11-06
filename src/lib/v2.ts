@@ -1,5 +1,5 @@
 import { zeroAddress } from 'viem'
-import type { PublicClient } from 'viem'
+import type { ContractFunctionReturnType, PublicClient } from 'viem'
 import {
   concat,
   encodeAbiParameters,
@@ -12,7 +12,13 @@ import {
   toHex,
 } from 'viem/utils'
 import { labelhash, namehash } from 'viem/ens'
-import { ethRegistrarAbi, ethRenewerAbi, v2RegistryAbi, verifiableFactoryAbi } from './contracts.ts'
+import {
+  ethRegistrarAbi,
+  ethRenewerAbi,
+  v1BridgeResolverAbi,
+  v2RegistryAbi,
+  verifiableFactoryAbi,
+} from './contracts.ts'
 import { isUnsupportedCall } from './records.ts'
 
 // Mirrors IPermissionedRegistry.Status in contracts-v2.
@@ -21,6 +27,8 @@ export enum V2Status {
   RESERVED,
   REGISTERED,
 }
+
+export type V2RegistryState = ContractFunctionReturnType<typeof v2RegistryAbi, 'view', 'getState'>
 
 /** Quotes a registration. The registrar reverts on names, durations, and tokens it would reject. */
 export async function getRegisterPrice(opts: {
@@ -265,6 +273,94 @@ export async function getV2ParentRegistryForName(opts: {
   })
 
   return { label, parent, ...result }
+}
+
+type V2Entry =
+  /** The name's registry entry; state and owner are null if the registry doesn't support them. */
+  | {
+      readonly registry: `0x${string}`
+      readonly state: V2RegistryState | null
+      readonly owner: `0x${string}` | null
+    }
+  /** An ancestor has no subregistry, so the name has no entry in ENSv2. */
+  | { readonly registry: null; readonly state: null; readonly owner: null }
+
+/** Reads that a contract may not implement resolve to null. */
+function unlessUnsupported<T>(read: Promise<T>) {
+  return read.catch((error) => {
+    if (isUnsupportedCall(error)) return null
+    throw error
+  })
+}
+
+/** Walks the ENSv2 registries from the root to the entry for `name`, as resolution does. */
+export async function findV2Entry(opts: {
+  client: PublicClient
+  rootRegistry: `0x${string}`
+  name: string
+}): Promise<V2Entry> {
+  const labels = splitEnsName(opts.name)
+  let registry = getAddress(opts.rootRegistry)
+
+  for (const label of labels.slice(1).reverse()) {
+    const subregistry = await opts.client.readContract({
+      address: registry,
+      abi: v2RegistryAbi,
+      functionName: 'getSubregistry',
+      args: [label],
+    })
+    if (isAddressEqual(subregistry, zeroAddress))
+      return { registry: null, state: null, owner: null }
+    registry = getAddress(subregistry)
+  }
+
+  // Custom subregistries may only implement IRegistry.
+  const label = labels[0]!
+  const [state, owner] = await Promise.all([
+    unlessUnsupported(
+      opts.client.readContract({
+        address: registry,
+        abi: v2RegistryAbi,
+        functionName: 'getState',
+        args: [v2LabelId(label)],
+      }),
+    ),
+    unlessUnsupported(
+      opts.client.readContract({
+        address: registry,
+        abi: v2RegistryAbi,
+        functionName: 'findOwner',
+        args: [label],
+      }),
+    ),
+  ])
+  return { registry, state, owner: owner === zeroAddress ? null : owner }
+}
+
+/**
+ * True when `resolver` is an ENSv2 bridge that resolves through the ENSv1 registry: the
+ * ENSV1Resolver for unmigrated names, or the DNSTLDResolver, which checks ENSv1 before DNSSEC.
+ */
+export async function isV1Bridge(opts: {
+  client: PublicClient
+  resolver: `0x${string}`
+  registryV1: `0x${string}`
+}) {
+  if (isAddressEqual(opts.resolver, zeroAddress)) return false
+  const registries = await Promise.all(
+    (['REGISTRY_V1', 'ENS_REGISTRY_V1'] as const).map((functionName) =>
+      unlessUnsupported(
+        opts.client.readContract({
+          address: opts.resolver,
+          abi: v1BridgeResolverAbi,
+          functionName,
+        }),
+      ),
+    ),
+  )
+  return registries.some(
+    (registry) => registry != null && isAddressEqual(registry, opts.registryV1),
+  )
 }
 
 export function formatSalt(salt: bigint) {

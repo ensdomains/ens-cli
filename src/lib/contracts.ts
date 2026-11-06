@@ -227,6 +227,12 @@ export const compositeResolverAbi = parseAbi([
   'function getResolver(bytes name) view returns (address resolver, bool offchain)',
 ])
 
+/** ENSv2 resolvers that mirror ENSv1: ENSV1Resolver exposes REGISTRY_V1, DNSTLDResolver ENS_REGISTRY_V1. */
+export const v1BridgeResolverAbi = parseAbi([
+  'function REGISTRY_V1() view returns (address)',
+  'function ENS_REGISTRY_V1() view returns (address)',
+])
+
 export const ensRegistryAbi = parseAbi([
   'function owner(bytes32 node) external view returns (address)',
   'function resolver(bytes32 node) external view returns (address)',
@@ -247,6 +253,7 @@ export const universalResolverAbi = parseAbi([
 export const v2RegistryAbi = parseAbi([
   'function getState(uint256 anyId) external view returns ((uint8 status, uint64 expiry, address latestOwner, uint256 tokenId, uint256 resource))',
   'function getSubregistry(string label) external view returns (address)',
+  'function findOwner(string label) external view returns (address)',
   'function register(string label, address owner, address registry, address resolver, uint256 roleBitmap, uint64 expires) external returns (uint256 tokenId)',
   'function ownerOf(uint256 tokenId) external view returns (address)',
   'function setResolver(uint256 anyId, address resolver) external',

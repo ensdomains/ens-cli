@@ -55,8 +55,10 @@ ens get text vitalik.eth --key com.twitter
 # Get avatar URL
 ens get avatar vitalik.eth
 
-# Show owner, resolver, and expiry for a .eth name
+# Show owner, resolver, and expiry for any name, following ENSv2 resolution
 ens whois vitalik.eth
+ens whois sub.nick.eth
+ens whois ens.domains
 ```
 
 ### Availability & Pricing
