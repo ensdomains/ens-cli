@@ -55,65 +55,81 @@ type V2Inactive = { readonly isV2: false }
 type V2Active = { readonly isV2: true; readonly ethRegistry: `0x${string}` }
 type V2NameActive = V2Active & { readonly nameState: V2RegistryState }
 
-export function isV2Active(c: Context): Promise<V2Active | V2Inactive>
-export function isV2Active(c: Context, name: string): Promise<V2NameActive | V2Inactive>
-export async function isV2Active(c: Context, name?: string) {
+/** The value of a settled read, rethrowing its error. */
+function settled<T>(result: PromiseSettledResult<T>): T {
+  if (result.status === 'rejected') throw result.reason
+  return result.value
+}
+
+/** The selected Universal Resolver's ENSv2 .eth registry, or undefined when ENSv2 is not active. */
+async function v2EthRegistry(c: Context) {
   const { client, chain } = clientFromContext(c)
   const resolver = universalResolverAddress(c, chain)
 
-  const supportsVersionCheck = await client.readContract({
-    address: resolver,
-    abi: universalResolverAbi,
-    functionName: 'supportsInterface',
-    args: [NORMALIZED_UNIVERSAL_RESOLVER_INTERFACE_ID],
-  })
-  if (!supportsVersionCheck) return { isV2: false } as const
-  const isV2 = await client.readContract({
-    address: resolver,
-    abi: universalResolverAbi,
-    functionName: 'isENSv2',
-  })
-  if (!isV2) return { isV2: false } as const
+  // Read in parallel, but in the original order of precedence: legacy resolvers revert on
+  // isENSv2 and ROOT_REGISTRY, so those results only count once the earlier read allows them.
+  const [supportsVersionCheck, isV2, rootRegistry] = await Promise.allSettled([
+    client.readContract({
+      address: resolver,
+      abi: universalResolverAbi,
+      functionName: 'supportsInterface',
+      args: [NORMALIZED_UNIVERSAL_RESOLVER_INTERFACE_ID],
+    }),
+    client.readContract({ address: resolver, abi: universalResolverAbi, functionName: 'isENSv2' }),
+    // Registry-walking methods moved to UniversalHelper. Read the selected UR's
+    // root directly so a --universal-resolver override cannot mix deployments.
+    client.readContract({
+      address: resolver,
+      abi: universalResolverAbi,
+      functionName: 'ROOT_REGISTRY',
+    }),
+  ])
+  if (!settled(supportsVersionCheck) || !settled(isV2)) return undefined
+  const root = settled(rootRegistry)
+  if (root === zeroAddress) throw new Error('ENSv2 Universal Resolver has no root registry')
 
-  // Registry-walking methods moved to UniversalHelper. Read the selected UR's
-  // root directly so a --universal-resolver override cannot mix deployments.
-  const rootRegistry = await client.readContract({
-    address: resolver,
-    abi: universalResolverAbi,
-    functionName: 'ROOT_REGISTRY',
-  })
-  if (rootRegistry === zeroAddress) throw new Error('ENSv2 Universal Resolver has no root registry')
   const ethRegistry = await client.readContract({
-    address: rootRegistry,
+    address: root,
     abi: v2RegistryAbi,
     functionName: 'getSubregistry',
     args: ['eth'],
   })
   if (ethRegistry === zeroAddress) throw new Error('ENSv2 Universal Resolver has no .eth registry')
+  return ethRegistry
+}
 
-  if (name != null) {
-    const label = eth2ldLabelForName(name)
-    if (label == null) return { isV2: false } as const
+function readNameState(c: Context, ethRegistry: `0x${string}`, label: string) {
+  return clientFromContext(c).client.readContract({
+    address: ethRegistry,
+    abi: v2RegistryAbi,
+    functionName: 'getState',
+    args: [BigInt(labelhash(label))],
+  })
+}
 
-    const nameState = await client.readContract({
-      address: ethRegistry,
-      abi: v2RegistryAbi,
-      functionName: 'getState',
-      args: [BigInt(labelhash(label))],
-    })
-    // Natural expiry preserves latestOwner; explicit unregister instead bumps the
-    // token version stored in the low 32 bits. Either indicates prior v2 ownership.
-    const hasRegistrationHistory = (nameState.tokenId & 0xffff_ffffn) !== 0n
-    const migrated =
-      nameState.status === V2Status.REGISTERED ||
-      (nameState.status === V2Status.AVAILABLE &&
-        (nameState.latestOwner !== zeroAddress || hasRegistrationHistory))
-    if (!migrated) return { isV2: false } as const
+function isMigrated(nameState: V2RegistryState) {
+  // Natural expiry preserves latestOwner; explicit unregister instead bumps the
+  // token version stored in the low 32 bits. Either indicates prior v2 ownership.
+  const hasRegistrationHistory = (nameState.tokenId & 0xffff_ffffn) !== 0n
+  return (
+    nameState.status === V2Status.REGISTERED ||
+    (nameState.status === V2Status.AVAILABLE &&
+      (nameState.latestOwner !== zeroAddress || hasRegistrationHistory))
+  )
+}
 
-    return { isV2: true, ethRegistry, nameState } as const
-  }
+export function isV2Active(c: Context): Promise<V2Active | V2Inactive>
+export function isV2Active(c: Context, name: string): Promise<V2NameActive | V2Inactive>
+export async function isV2Active(c: Context, name?: string) {
+  const ethRegistry = await v2EthRegistry(c)
+  if (!ethRegistry) return { isV2: false } as const
+  if (name == null) return { isV2: true, ethRegistry } as const
 
-  return { isV2: true, ethRegistry } as const
+  const label = eth2ldLabelForName(name)
+  if (label == null) return { isV2: false } as const
+  const nameState = await readNameState(c, ethRegistry, label)
+  if (!isMigrated(nameState)) return { isV2: false } as const
+  return { isV2: true, ethRegistry, nameState } as const
 }
 
 async function configuredV2Deployment(c: Context, ethRegistry: `0x${string}`) {
@@ -149,26 +165,34 @@ async function configuredV2Deployment(c: Context, ethRegistry: `0x${string}`) {
 }
 
 export async function activeV2Deployment(c: Context) {
-  const v2 = await isV2Active(c)
-  return v2.isV2 ? configuredV2Deployment(c, v2.ethRegistry) : undefined
+  const ethRegistry = await v2EthRegistry(c)
+  return ethRegistry ? configuredV2Deployment(c, ethRegistry) : undefined
 }
 
 export async function activeV2Name(c: Context, name: string) {
-  const v2 = await isV2Active(c, name)
-  if (!v2.isV2) return undefined
-  return { ...v2, deployment: await configuredV2Deployment(c, v2.ethRegistry) }
+  const ethRegistry = await v2EthRegistry(c)
+  const label = eth2ldLabelForName(name)
+  if (!ethRegistry || label == null) return undefined
+  // The deployment check doesn't depend on the name state, so run both reads at once.
+  // It only matters for migrated names: for others, its result (or error) is ignored.
+  const [nameState, deployment] = await Promise.allSettled([
+    readNameState(c, ethRegistry, label),
+    configuredV2Deployment(c, ethRegistry),
+  ])
+  const state = settled(nameState)
+  if (!isMigrated(state)) return undefined
+  return { isV2: true, ethRegistry, nameState: state, deployment: settled(deployment) } as const
 }
 
 export async function renewalTarget(c: Context, label: string) {
-  const deployment = await activeV2Deployment(c)
-  if (!deployment) return undefined
-  const { client } = clientFromContext(c)
-  const state = await client.readContract({
-    address: deployment.registry,
-    abi: v2RegistryAbi,
-    functionName: 'getState',
-    args: [BigInt(labelhash(label))],
-  })
+  const ethRegistry = await v2EthRegistry(c)
+  if (!ethRegistry) return undefined
+  const [configured, nameState] = await Promise.allSettled([
+    configuredV2Deployment(c, ethRegistry),
+    readNameState(c, ethRegistry, label),
+  ])
+  const deployment = settled(configured)
+  const state = settled(nameState)
   // ETHRenewerV1._isRenewable includes expired reservations in grace.
   // The contracts validate grace and duration; status alone cannot identify v1.
   const isV1 =
